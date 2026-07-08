@@ -3,9 +3,14 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Eval runs (may contain LLM output)
-eval-runs/
-transcripts/
+# Eval runs — results.yaml + summary.json ARE committed (CI scores them);
+# transcripts and their turns are opt-in (may contain sensitive prompts/output).
+# If you want to commit them, remove the ignore rule below for that run dir.
+eval-runs/**/transcripts/
+
+# Golden fixtures for parser regression — DO commit these
+!fixtures/
+!fixtures/**
 
 # macOS
 .DS_Store

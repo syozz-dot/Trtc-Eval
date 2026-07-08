@@ -89,8 +89,10 @@ def parse_transcript(jsonl_text: str, dialect: str = "claude") -> ParsedTranscri
     """
     把 headless CLI 的 stream-json 输出解析成结构化事件。
 
-    dialect="claude": 适用于 claude-code / cursor / codebuddy
+    dialect="claude": 适用于 claude-code / codebuddy
         事件家族: system.init / user / assistant.tool_use / user.tool_result / result
+    dialect="cursor": 适用于 Cursor cursor-agent CLI
+        事件家族: system.init / user / assistant / tool_call(started|completed).<toolKind>ToolCall / result
     dialect="codex": 适用于 OpenAI codex CLI
         事件家族: thread.started / turn.started / item.completed(command_execution|tool_call|agent_message) / turn.completed
     """
@@ -98,6 +100,8 @@ def parse_transcript(jsonl_text: str, dialect: str = "claude") -> ParsedTranscri
 
     if dialect == "codex":
         return _parse_codex(jsonl_text, result)
+    if dialect == "cursor":
+        return _parse_cursor(jsonl_text, result)
 
     # 默认 claude 方言
     for line in jsonl_text.splitlines():
@@ -227,6 +231,116 @@ def _parse_codex(jsonl_text: str, result: ParsedTranscript) -> ParsedTranscript:
         elif etype == "turn.completed":
             if not result.result_status:
                 result.result_status = "success"
+
+    return result
+
+
+def _parse_cursor(jsonl_text: str, result: ParsedTranscript) -> ParsedTranscript:
+    """Cursor cursor-agent CLI stream-json 解析器。
+
+    Cursor 把每次工具调用编码为顶层 type=tool_call 事件（不在 assistant.content 里）。
+    工具类型以嵌套 key 命名：tool_call.<XxxToolCall>，例如：
+      shellToolCall.args.command                → Bash-equivalent
+      readToolCall.args.path                    → Read
+      globToolCall.args.{globPattern,targetDirectory}
+      editToolCall / writeToolCall.args.path
+    子类型 started 只有 args，completed 同时带 args + result。
+    我们用 started 事件建 ToolCall，用 completed 事件建 ToolResult；同一 call_id 配对。
+    """
+    tool_kind_map = {
+        "shellToolCall":  "Bash",
+        "readToolCall":   "Read",
+        "globToolCall":   "Glob",
+        "editToolCall":   "Edit",
+        "writeToolCall":  "Write",
+        "grepToolCall":   "Grep",
+        "skillToolCall":  "Skill",
+    }
+
+    def _normalize_input(kind: str, args: dict) -> dict:
+        """把 cursor 的 args 字段名对齐到 claude 方言，方便判定器复用。"""
+        if not isinstance(args, dict):
+            return {}
+        if kind == "shellToolCall":
+            return {"command": args.get("command", "")}
+        if kind == "readToolCall":
+            return {"file_path": args.get("path", "")}
+        if kind == "globToolCall":
+            return {
+                "pattern": args.get("globPattern", ""),
+                "path": args.get("targetDirectory", ""),
+            }
+        if kind in ("editToolCall", "writeToolCall"):
+            return {"file_path": args.get("path", "")}
+        if kind == "grepToolCall":
+            return {"pattern": args.get("pattern", ""), "path": args.get("path", "")}
+        if kind == "skillToolCall":
+            return {"skill": args.get("skill") or args.get("name", "")}
+        return dict(args)
+
+    for line in jsonl_text.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        etype = e.get("type", "")
+
+        if etype == "assistant":
+            for block in e.get("message", {}).get("content", []):
+                if block.get("type") == "text":
+                    result.text_blocks.append(block.get("text", ""))
+
+        elif etype == "tool_call":
+            subtype = e.get("subtype", "")
+            call_id = e.get("call_id", "")
+            tc = e.get("tool_call", {})
+
+            # 找到实际工具类型的嵌套 key
+            kind = next(
+                (k for k in tc.keys() if k in tool_kind_map),
+                None,
+            )
+            if not kind:
+                continue
+
+            inner = tc.get(kind, {}) or {}
+            args = inner.get("args", {}) or {}
+
+            if subtype == "started":
+                result.tool_calls.append(ToolCall(
+                    name=tool_kind_map[kind],
+                    input=_normalize_input(kind, args),
+                    id=call_id,
+                ))
+            elif subtype == "completed":
+                res = inner.get("result", {}) or {}
+                success = res.get("success") if isinstance(res, dict) else None
+                error = res.get("error") if isinstance(res, dict) else None
+                is_error = error is not None
+                if isinstance(success, dict):
+                    content = (
+                        success.get("stdout")
+                        or success.get("interleavedOutput")
+                        or json.dumps(success, ensure_ascii=False)
+                    )
+                elif error is not None:
+                    content = json.dumps(error, ensure_ascii=False)
+                else:
+                    content = json.dumps(res, ensure_ascii=False)
+                result.tool_results[call_id] = ToolResult(
+                    tool_use_id=call_id,
+                    content=str(content),
+                    is_error=is_error,
+                )
+
+        elif etype == "result":
+            result.result_status = e.get("subtype", "ok")
+            if "error" in e:
+                result.error = e["error"]
 
     return result
 

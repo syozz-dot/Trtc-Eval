@@ -1,0 +1,47 @@
+name: Parser Regression + Secret Scan
+
+# Runs on every PR and push to main.
+#
+# Two guards, both zero-cost and no API key needed:
+#
+#   1. Parser fixture regression: replays 8 golden stream-json transcripts
+#      (claude-code / cursor / codex / codebuddy × 2 smoke cases) through
+#      run_eval.py's parsers + judges and asserts every observation returns Y.
+#      Catches parser-dialect regressions (like the cursor false-negative
+#      shipped on 2026-07-08) before they can silently break scoring.
+#
+#   2. Sensitive-info scan: checks the tree for API keys, OAuth tokens, and
+#      PII patterns. Second line of defence after the local pre-commit hook
+#      (install with scripts/install-hooks.sh).
+#
+# Both are hard gates for PR merge.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  parser-regression:
+    name: Parser fixture regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run regression
+        run: python3 tests/test_parser_regression.py
+
+  secret-scan:
+    name: Sensitive info scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Scan tree
+        run: python3 scripts/scan_sensitive.py

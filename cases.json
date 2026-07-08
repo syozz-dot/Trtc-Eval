@@ -165,7 +165,7 @@
         "args": ["-p", "--output-format", "stream-json", "--force"],
         "prompt_position": "arg",
         "resume_args": ["--resume", "{session_id}"],
-        "event_dialect": "claude",
+        "event_dialect": "cursor",
         "session_id_source": "system.init.session_id",
         "auth": "CURSOR_API_KEY or cursor-agent login"
       },

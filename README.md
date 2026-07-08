@@ -121,46 +121,79 @@ python3 score.py results.claude-code.yaml --baseline ./eval-runs/prev/summary.cl
 
 ## 支持的 IDE
 
-| IDE | Phase 1 | Phase 2 全自动 | 备注 |
-|---|---|---|---|
-| **claude-code** | ✅ | ✅ | 已实测跑通 |
-| **cursor** | ✅ | ✅ | 脚本支持；实机跑通 stream-json 事件解析（本机额度状态可能影响端到端） |
-| **codebuddy** | ✅ | ✅ | 脚本支持（事件流与 claude 同构，共享 dialect） |
-| **codex** | ✅ | ✅ | **已实测跑通**（3/3 pass on P2-DOCS-ERRCODE），Codex 事件流独立方言 (`thread.started` / `item.completed`) 已解析 |
+| IDE | Phase 1 | Phase 2 全自动 | 事件方言 | 备注 |
+|---|---|---|---|---|
+| **claude-code** | ✅ | ✅ | `claude` | 已实测跑通（sonnet/haiku） |
+| **cursor** | ✅ | ✅ | `cursor` | 2026-07-08 修 parser 后跑通 auto 模型 2/2 |
+| **codebuddy** | ✅ | ✅ | `claude`（同构）| 2026-07-08 登录后跑通 2/2 |
+| **codex** | ✅ | ✅ | `codex` | 独立方言（`thread.started` / `item.completed`）已解析 |
 
 跑其他 IDE：`python3 run_eval.py --ide <cursor|codebuddy|codex> --case P2-DOCS-ERRCODE`
 
 ---
 
-## 两种运行方式
+## 日常工作流（本地跑 P2 + CI 打分）
 
-**A. 手动 CLI**：直接在终端跑
+**关键约束**：P2 真调 LLM 那步走本地个人 CLI（用 Pro 订阅额度免费，不涉及 API key 泄露）。CI 只做静态检查 + 结果打分，**零 API key**。
+
+**每 PR（skill 有改动时）**：
+1. 本地跑 smoke（3-5 分钟）：`python3 run_eval.py --ide claude-code --tags smoke --out-dir eval-runs/$(date +%Y%m%d)-smoke`
+2. `git add eval-runs/<date>-smoke/` 一起进 PR
+3. CI 自动做：P1 install check + parser 回归 + 敏感信息扫描 + 对刚提交的 results.yaml 跑 score.py，把 markdown 报告贴到 PR
+
+**发版前（release 分支上）**：本地多终端跑全量 P2（约 60 分钟）：
 ```sh
-python3 run_eval.py --ide claude-code --tags smoke
+for ide in claude-code cursor codebuddy codex; do
+  python3 run_eval.py --ide $ide --out-dir eval-runs/$(date +%Y%m%d)-release-$ide &
+done
+wait
+# 4 份 results.yaml 一起 commit，CI 自动出对比报告
 ```
 
-**B. 让另一个 IDE 里的 AI 代跑**：在 Cursor / CodeBuddy 里对 AI 说：
-> 帮我跑 `python3 run_eval.py --ide claude-code --tags smoke`，跑完对 results 调用 `python3 score.py` 打分，把 fail 明细贴给我
+**pre-commit 安装**（每次 clone 后跑一次）：
+```sh
+./scripts/install-hooks.sh   # 装 .git/hooks/pre-commit，扫暂存文件里的 API key
+```
 
-AI 用它自己的 Bash 工具跑命令，评测本身仍由 run_eval.py 完成。**评测器和被测器保持隔离**——用 Cursor 驱动可以评测 claude-code / codex / codebuddy，反之亦然。
+---
 
-⚠️ **不要**让被测 IDE 自己跑针对自己的评测（如让 claude-code 里的 AI 跑 `--ide claude-code`）——同一会话/上下文会互相干扰。
+## CI 结构
+
+| Workflow | 触发 | 用途 | 需 API key |
+|---|---|---|---|
+| `skill-check-install.yml` | 每 PR + 每 push to main | P1 全量资产检查（4 IDE × npx add） | ❌ |
+| `parser-regression.yml` | 每 PR + 每 push to main | 8 个 golden transcript 回归 + 敏感信息扫描 | ❌ |
+| `skill-eval-p2-score.yml` | PR 里 `eval-runs/**/results.*.yaml` 变更 | 对提交的 results 跑 score.py，贴 PR 报告，跟 main 对比 baseline | ❌ |
+| `skill-ci-probe.yml` | 手动 dispatch | 探测 IDE CLI 在 GH Runner 里的认证方式（研究性质，不阻塞任何 PR） | 只跑 `--help`，不调 LLM |
+
+**没有任何 workflow 会调 LLM**。本地跑 → 提交 results → CI 打分是不可逾越的路径。
+
+---
+
+## Fixtures（parser 回归）
+
+`fixtures/transcripts/<ide>/<case>.turn1.jsonl` 存放 8 个已知全绿的 stream-json 转录（每家 IDE × smoke 2 case）。`tests/test_parser_regression.py` 用这些做回归——一旦 parser 或判定器改动导致某个已知 pass 的样本变 fail，CI 立刻挡下。
+
+替换 fixture：直接把 `eval-runs/<...>/transcripts/*.jsonl` 拷到对应 `fixtures/transcripts/<ide>/` 覆盖即可。**替换前请手动确认这份转录确实是"全 Y"的样本**。
 
 ---
 
 ## 文件结构
 
 ```
-trtc-eval/
+Trtc-Eval/
 ├── cases.json               单一数据源（10 P2 + 4 P1，含 asset_catalog / ide_profiles）
 ├── check_install.py         Phase 1 检查器
 ├── generate.py              Phase 2 测试单生成器（人工模式）
 ├── run_eval.py              Phase 2 全自动评测器
 ├── score.py                 打分 + baseline 对比
-├── testsheet.md             (自动生成) 人读题目单
-├── results_template.yaml    (自动生成) 空白答题卡
-├── trtc-eval-flow.html      方案规划文档（PM 视角）
-└── AGENTS.md / CLAUDE.md / CODEBUDDY.md   (npx add 生成，AI 指令文件)
+├── fixtures/transcripts/    parser 回归 fixture（4 IDE × 2 smoke）
+├── tests/                   fixture 回归测试
+├── scripts/
+│   ├── scan_sensitive.py    敏感信息扫描（pre-commit + CI 共用）
+│   └── install-hooks.sh     一键装 pre-commit hook
+├── eval-runs/               本地跑出的 results.yaml + transcripts（进 PR 由 CI 打分）
+└── .github/workflows/       4 份 CI（见上表）
 ```
 
 ---
@@ -177,9 +210,8 @@ trtc-eval/
 
 ---
 
-## 已知遗留
+## 遗留 / 未来
 
-- Cursor 完整事件流实测（等 7/9 Pro 配额重置）
-- run_eval.py 拓 codex / codebuddy / cursor（主逻辑不动，改配置切命令名）
-- Phase 1 接入 GitHub CI
-- Phase 3 LLM Judge（二期，仍走 CLI 形态）
+- Phase 3 LLM Judge：语义级打分，仍走本地形态（个人订阅），CI 只汇总——路线跟 P2 一样
+- fixture 覆盖面拓展：目前只有 smoke 2 case，可以补 conference / chat / hooks 各 1 条做更全面的回归
+- Codex 上 CI probe 里的 CLI 认证方式还未在 CI 环境实测（不阻塞，因为 P2 已经不走 CI）

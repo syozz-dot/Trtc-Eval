@@ -1,0 +1,105 @@
+name: P2 Score Report (offline)
+
+# Runs when a PR modifies eval-runs/**/results.*.yaml — that is, when a developer
+# committed the output of a LOCAL run_eval.py run to share results with the team.
+#
+# This workflow itself calls ZERO LLMs. It only:
+#   1. Runs score.py against the committed results.yaml files
+#   2. Compares against the summary.<ide>.json baseline on main (if present)
+#   3. Posts a markdown scoreboard as a PR comment
+#
+# The whole point: developer runs the expensive LLM step locally (using their
+# personal Pro subscription, avoiding API-key exposure in CI), then commits the
+# structured output. CI does the deterministic scoring + reporting.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'eval-runs/**/results.*.yaml'
+      - 'cases.json'
+      - 'score.py'
+
+permissions:
+  contents: read
+  pull-requests: write   # for sticky comment
+
+jobs:
+  score-report:
+    name: Score committed eval-runs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need main for baseline diff
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Discover results in this PR
+        id: discover
+        run: |
+          # Every results.*.yaml added or modified in eval-runs/**
+          FILES=$(git diff --name-only --diff-filter=ACMR "origin/${GITHUB_BASE_REF}"...HEAD \
+                    -- 'eval-runs/**/results.*.yaml' | tr '\n' ' ')
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "Discovered: $FILES"
+
+      - name: Skip if nothing to score
+        if: steps.discover.outputs.files == ''
+        run: echo "No results.*.yaml touched in this PR — nothing to score."
+
+      - name: Score each file
+        if: steps.discover.outputs.files != ''
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/score-report
+          echo "# P2 Eval Score Report" > /tmp/score-report/comment.md
+          echo "" >> /tmp/score-report/comment.md
+          echo "Committed by \`$GITHUB_HEAD_REF\`, scored by CI. No API keys used." >> /tmp/score-report/comment.md
+          echo "" >> /tmp/score-report/comment.md
+
+          for f in ${{ steps.discover.outputs.files }}; do
+            if [ ! -f "$f" ]; then continue; fi
+            RUN_DIR="$(dirname "$f")"
+            IDE="$(basename "$f" .yaml | sed 's/^results\.//')"
+            echo "── scoring $f ──"
+
+            # Try to find a baseline on main
+            BASELINE_ARG=""
+            BASELINE_NOTE="_(no baseline found on main)_"
+            git fetch origin main --depth=1 2>/dev/null || true
+            if git ls-tree -r origin/main --name-only 2>/dev/null | grep -qE "eval-runs/.*/summary\.${IDE}\.json$"; then
+              # Use the most recent one committed on main
+              LATEST=$(git ls-tree -r origin/main --name-only \
+                        | grep -E "eval-runs/.*/summary\.${IDE}\.json$" \
+                        | sort | tail -1)
+              git show "origin/main:$LATEST" > "/tmp/score-report/baseline.${IDE}.json" 2>/dev/null || true
+              if [ -s "/tmp/score-report/baseline.${IDE}.json" ]; then
+                BASELINE_ARG="--baseline /tmp/score-report/baseline.${IDE}.json"
+                BASELINE_NOTE="_(baseline: \`$LATEST\` from main)_"
+              fi
+            fi
+
+            {
+              echo "## \`$IDE\` — \`$RUN_DIR\`"
+              echo ""
+              echo "$BASELINE_NOTE"
+              echo ""
+              echo '```'
+              python3 score.py "$f" --cases cases.json $BASELINE_ARG || true
+              echo '```'
+              echo ""
+            } >> /tmp/score-report/comment.md
+          done
+
+          cat /tmp/score-report/comment.md
+
+      - name: Post scoreboard to PR
+        if: steps.discover.outputs.files != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: p2-score-report
+          path: /tmp/score-report/comment.md
