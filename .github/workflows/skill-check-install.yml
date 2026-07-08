@@ -17,13 +17,29 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      npx_target:
+        description: 'npm package to test (default @tencent-rtc/trtc-agent-skills@latest). Set to a specific version like @0.1.7 to pin.'
+        required: false
+        default: '@tencent-rtc/trtc-agent-skills@latest'
+        type: string
+      triggered_by:
+        description: 'Optional label for who kicked this off (e.g. "agent-skills release v0.1.8")'
+        required: false
+        default: ''
+        type: string
+  # Safety-net: catches new @latest publishes that no one dispatched manually.
+  # 03:07 UTC = 11:07 China time; off-peak, staggered to avoid the :00 rush.
+  schedule:
+    - cron: '7 3 * * *'
 
 permissions:
   contents: read
   pull-requests: write   # summarize step needs this to post the sticky comment
 
 env:
-  NPX_TARGET: '@tencent-rtc/trtc-agent-skills@latest'
+  # workflow_dispatch input overrides the default; PR / push / schedule falls through.
+  NPX_TARGET: ${{ inputs.npx_target || '@tencent-rtc/trtc-agent-skills@latest' }}
 
 jobs:
   check-install:

@@ -5,6 +5,8 @@ TRTC agent-skills 多 IDE 评测工具集。回答两个问题：
 1. **skill 装得对不对？** — Phase 1 全量资产分发检查
 2. **skill 用得对不对？** — Phase 2 行为评测（8 个观察维度）
 
+**操作 SOP**：[`SOP.md`](./SOP.md)（新人上手 / 日常 PR / 发版前 / 维护场景 / 自动触发结构）
+
 方案背景与决策见 [`trtc-eval-flow.html`](./trtc-eval-flow.html)。
 
 ---
