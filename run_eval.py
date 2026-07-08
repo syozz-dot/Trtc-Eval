@@ -891,6 +891,9 @@ def main() -> int:
                              " 适合新 IDE 集成 / 额度紧张时快速自检")
     parser.add_argument("--probe-model", default=None,
                         help="--probe 模式下使用的模型；不填则用 IDE 默认（cursor auto / codebuddy haiku 等）")
+    parser.add_argument("--model", default=None,
+                        help="完整评测使用的模型（CI 便宜档常用：haiku / gpt-4o-mini / claude-haiku-4.5）；"
+                             " claude/cursor/codebuddy 走 --model，codex 走 -c model=...")
     args = parser.parse_args()
 
     if args.dry_run and args.probe:
@@ -915,6 +918,19 @@ def main() -> int:
     # ── probe 模式：只验事件流，不跑 case ──────────────────────────
     if args.probe:
         return run_probe(args.ide, profile, working_dir, args.probe_model)
+
+    # ── 完整评测：如果指定了 --model，把模型注入到 profile.cli.args ──
+    if args.model:
+        import copy
+        profile = copy.deepcopy(profile)
+        cli = profile.setdefault("cli", {})
+        cli_args = list(cli.get("args", []))
+        if args.ide == "codex":
+            cli_args = ["-c", f'model="{args.model}"'] + cli_args
+        else:
+            cli_args = cli_args + ["--model", args.model]
+        cli["args"] = cli_args
+        print(f"[run_eval] model override: {args.model}")
 
     # 挑 P2 case
     tag_filter = set(args.tags.split(",")) if args.tags else set()

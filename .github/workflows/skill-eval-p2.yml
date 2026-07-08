@@ -1,14 +1,19 @@
 name: Skill Behavior Eval (P2)
 
-# Full end-to-end behavior evaluation for the TRTC skill.
-# Not gated on PRs — costs LLM tokens and takes 15–90 minutes.
+# End-to-end behavior evaluation for the TRTC skill.
+# Tests skill loading, routing, hooks, tool calls — NOT model quality.
+# Uses cheap models by default (haiku / gpt-4o-mini) to keep cost minimal.
 #
 # Triggers:
-#   - workflow_dispatch: manual, with knobs for IDE and tag filter
+#   - workflow_dispatch: manual, with knobs for IDE / tags / model
 #   - schedule: every Monday 03:00 UTC (baseline drift watch)
 #
-# Currently supports claude-code + codex only. Cursor / CodeBuddy CI
-# auth is untested — see skill-ci-probe.yml for exploratory runs.
+# Cost estimate per full run (10 cases):
+#   - Claude Haiku 4.5:  ~$0.20
+#   - GPT-4o-mini:       ~$0.02
+# Set $5/month spend limit at:
+#   Anthropic: https://console.anthropic.com/settings/limits
+#   OpenAI:    https://platform.openai.com/settings/organization/limits
 
 on:
   workflow_dispatch:
@@ -16,22 +21,35 @@ on:
       ide:
         description: 'IDE to evaluate'
         required: true
-        default: 'claude-code'
+        default: 'both'
         type: choice
         options:
           - claude-code
           - codex
           - both
       tags:
-        description: 'Case tag filter (e.g. smoke). Blank = all.'
+        description: 'Case tag filter (e.g. smoke for 2 quick FAQ cases). Blank = all 10.'
         required: false
         default: ''
+        type: string
+      claude_model:
+        description: 'Model for claude-code (default haiku-4.5)'
+        required: false
+        default: 'claude-haiku-4-5'
+        type: string
+      codex_model:
+        description: 'Model for codex (default gpt-4o-mini)'
+        required: false
+        default: 'gpt-4o-mini'
         type: string
   schedule:
     - cron: '0 3 * * 1'
 
 env:
   NPX_TARGET: '@tencent-rtc/trtc-agent-skills@latest'
+  # Defaults used when scheduled (no inputs). Change here to steer cron runs.
+  DEFAULT_CLAUDE_MODEL: 'claude-haiku-4-5'
+  DEFAULT_CODEX_MODEL: 'gpt-4o-mini'
 
 jobs:
   eval:
@@ -86,6 +104,22 @@ jobs:
             codex)       command -v codex  && codex --version ;;
           esac
 
+      - name: Resolve model for this IDE
+        id: model
+        run: |
+          case "${{ matrix.ide }}" in
+            claude-code)
+              MODEL="${{ inputs.claude_model }}"
+              [ -z "$MODEL" ] && MODEL="$DEFAULT_CLAUDE_MODEL"
+              ;;
+            codex)
+              MODEL="${{ inputs.codex_model }}"
+              [ -z "$MODEL" ] && MODEL="$DEFAULT_CODEX_MODEL"
+              ;;
+          esac
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "Using model: $MODEL"
+
       - name: Probe event stream (sanity check, ~30s)
         working-directory: /tmp/install-target
         env:
@@ -96,7 +130,8 @@ jobs:
             --ide "${{ matrix.ide }}" \
             --working-dir /tmp/install-target \
             --cases "$GITHUB_WORKSPACE/cases.json" \
-            --probe
+            --probe \
+            --probe-model "${{ steps.model.outputs.model }}"
 
       - name: Run P2 eval
         working-directory: /tmp/install-target
@@ -113,6 +148,7 @@ jobs:
             --working-dir /tmp/install-target \
             --cases "$GITHUB_WORKSPACE/cases.json" \
             --out-dir "$GITHUB_WORKSPACE/eval-runs/${{ github.run_id }}" \
+            --model "${{ steps.model.outputs.model }}" \
             $TAGS_ARG
 
       - name: Score
