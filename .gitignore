@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Eval runs (may contain LLM output)
+eval-runs/
+transcripts/
+
+# macOS
+.DS_Store
+
+# Locally-installed skill target (from npx add for testing)
+.claude/
+.cursor/
+.codebuddy/
+.codex/
+.agents/

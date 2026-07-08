@@ -1,0 +1,76 @@
+name: Skill Install Check (P1)
+
+# Runs on every PR and push to main, plus manual dispatch.
+# Verifies that `npx add` distributes the full asset set
+# (SKILL.md × 6, hooks, tools, AI service scripts, plugin manifests)
+# to the correct per-IDE directories for claude-code / cursor /
+# codebuddy / codex.
+#
+# Tests the currently published @tencent-rtc/trtc-agent-skills@latest.
+# To pin a version, edit NPX_TARGET below.
+#
+# Free-of-charge, deterministic, no LLM calls — safe to gate PRs on.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NPX_TARGET: '@tencent-rtc/trtc-agent-skills@latest'
+
+jobs:
+  check-install:
+    name: check-install (${{ matrix.ide }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ide: [claude-code, cursor, codebuddy, codex]
+
+    steps:
+      - name: Checkout eval scripts
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install skill via npx (force all IDEs)
+        run: |
+          mkdir -p /tmp/install-target
+          cd /tmp/install-target
+          # --ide all: install for every supported IDE regardless of what
+          # the runner has installed locally (runners have none).
+          # --no-report: skip telemetry from CI.
+          npx -y "$NPX_TARGET" add --ide all --no-report
+          echo "--- installed layout ---"
+          for d in .claude .cursor .codebuddy .codex .agents; do
+            if [ -d "$d" ]; then
+              echo "== $d =="
+              find "$d" -maxdepth 3 -type f | head -25
+            fi
+          done
+
+      - name: Run P1 install check
+        run: |
+          python3 "$GITHUB_WORKSPACE/check_install.py" \
+            --repo-root /tmp/install-target \
+            --ide "${{ matrix.ide }}"
+
+      - name: Upload install layout on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-layout-${{ matrix.ide }}
+          path: /tmp/install-target/
+          if-no-files-found: ignore
+          retention-days: 7

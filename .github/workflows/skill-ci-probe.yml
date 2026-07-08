@@ -1,0 +1,126 @@
+name: CI Auth Probe (cursor / codebuddy)
+
+# Exploratory workflow: does cursor-agent / codebuddy CLI authenticate
+# in a headless CI environment? OAuth-based logins are the risk.
+#
+# Manual-only. Does NOT gate anything. Report-only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which IDE to probe'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - cursor
+          - codebuddy
+          - both
+
+env:
+  NPX_TARGET: '@tencent-rtc/trtc-agent-skills@latest'
+
+jobs:
+  probe:
+    name: probe (${{ matrix.ide }})
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        ide: >-
+          ${{
+            (inputs.target == 'cursor'    && fromJSON('["cursor"]'))
+            || (inputs.target == 'codebuddy' && fromJSON('["codebuddy"]'))
+            || fromJSON('["cursor","codebuddy"]')
+          }}
+
+    steps:
+      - name: Checkout eval scripts
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install cursor-agent CLI
+        if: matrix.ide == 'cursor'
+        run: |
+          curl -fsS https://cursor.com/install | bash || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install codebuddy CLI
+        if: matrix.ide == 'codebuddy'
+        run: |
+          # Placeholder — replace with the documented CodeBuddy CLI install
+          # command once confirmed. curl-piped installer expected.
+          curl -fsS https://www.codebuddy.cn/install.sh | bash || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Show CLI presence + help
+        run: |
+          case "${{ matrix.ide }}" in
+            cursor)
+              which cursor-agent || echo "cursor-agent not on PATH"
+              cursor-agent --help 2>&1 | head -60 || true
+              cursor-agent --version 2>&1 || true
+              ;;
+            codebuddy)
+              which codebuddy || echo "codebuddy not on PATH"
+              codebuddy --help 2>&1 | head -60 || true
+              codebuddy --version 2>&1 || true
+              ;;
+          esac
+
+      - name: Install skill (needed for realistic probe)
+        run: |
+          mkdir -p /tmp/install-target
+          cd /tmp/install-target
+          npx -y "$NPX_TARGET" add --ide all --no-report || true
+
+      - name: Try API-key auth if secret is set
+        working-directory: /tmp/install-target
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          CODEBUDDY_API_KEY: ${{ secrets.CODEBUDDY_API_KEY }}
+        run: |
+          case "${{ matrix.ide }}" in
+            cursor)
+              if [ -z "${CURSOR_API_KEY}" ]; then
+                echo "::warning::CURSOR_API_KEY not set — cannot test API-key auth"
+                exit 0
+              fi
+              python3 "$GITHUB_WORKSPACE/run_eval.py" \
+                --ide cursor \
+                --working-dir /tmp/install-target \
+                --cases "$GITHUB_WORKSPACE/cases.json" \
+                --probe || true
+              ;;
+            codebuddy)
+              if [ -z "${CODEBUDDY_API_KEY}" ]; then
+                echo "::warning::CODEBUDDY_API_KEY not set — cannot test API-key auth"
+                exit 0
+              fi
+              python3 "$GITHUB_WORKSPACE/run_eval.py" \
+                --ide codebuddy \
+                --working-dir /tmp/install-target \
+                --cases "$GITHUB_WORKSPACE/cases.json" \
+                --probe || true
+              ;;
+          esac
+
+      - name: Upload probe logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-${{ matrix.ide }}-${{ github.run_id }}
+          path: /tmp/install-target/
+          if-no-files-found: ignore
+          retention-days: 7
