@@ -1,0 +1,12 @@
+version: 2.0
+ide: claude-code
+tester: run_eval.py
+date: 2026-07-09
+cases:
+  - case_id: P2-DOCS-ERRCODE
+    observations:
+      route_level1: "Y"
+      reporting_called: "Y"
+      tools_called: "N"
+      trace_assertions: "Y"
+    notes: auto by run_eval.py; 1 turn(s)
