@@ -1,16 +1,13 @@
 {
   "version": "2.0.0",
   "description": "TRTC skill 评测用例集 v2 — 支持全量资产 P1 + 多轮 P2 8 维度 + IDE 能力差异化",
-
   "_doc": {
     "structure": "顶层四段：asset_catalog（资产清单）+ ide_profiles（各 IDE 能力 + 安装路径）+ cases（用例集）+ obs_keys（观察点字典）",
     "p1_principle": "P1 用例引用 asset_catalog 里的资产组，不在 case 里硬编码路径；按 IDE 能力差异引用不同的 asset_groups",
     "p2_principle": "P2 用例支持多轮（turns 数组），每轮可独立标注期望；用 ide_capabilities 字段标注观察点需要的 IDE 能力，score.py 据此跳过不可测维度"
   },
-
   "asset_catalog": {
     "_doc": "npx add 之后每个 IDE 目录（.claude / .cursor / .codebuddy / .codex）下的资产清单。所有路径以 IDE 目录为根，check_install.py 会拼上 ide_profiles[ide].install_root_prefix 得到完整路径。4 IDE 分发的资产完全一致（4 IDE 严格镜像）。",
-
     "skills_root": {
       "description": "5 个域 skill 的 SKILL.md（主调度 + 4 域）+ chat/docs 子 skill",
       "files": [
@@ -21,7 +18,6 @@
         "skills/trtc-chat/SKILL.md"
       ]
     },
-
     "hooks_scripts": {
       "description": "5 个 hook 脚本：越界读 / 阶段门控 / 越界写 / 强制 apply / 会议业务决策",
       "files": [
@@ -32,17 +28,18 @@
         "skills/trtc-conference/hooks/pretooluse_require_business_decisions.py"
       ]
     },
-
     "hooks_settings_claude_style": {
       "description": "Claude / CodeBuddy 的 hook 注册（settings.json 里的 hooks 段）",
-      "files": ["settings.json"]
+      "files": [
+        "settings.json"
+      ]
     },
-
     "hooks_settings_cursor_style": {
       "description": "Cursor / Codex 的 hook 注册（hooks.json 独立文件）",
-      "files": ["hooks.json"]
+      "files": [
+        "hooks.json"
+      ]
     },
-
     "hooks_dir": {
       "description": "IDE 级 hooks 目录（含 cursor-adapter.py 转译层）",
       "files": [
@@ -51,7 +48,6 @@
         "hooks/cursor-adapter.py"
       ]
     },
-
     "hooks_dir_cursor": {
       "description": "Cursor plugin 命名空间下的 hooks（比其他 IDE 多一层 trtc-agent-skills/）",
       "files": [
@@ -60,7 +56,6 @@
         "hooks/trtc-agent-skills/cursor-adapter.py"
       ]
     },
-
     "shared_tools": {
       "description": "trtc 主 skill 的共享工具层（15 个 Python 模块）",
       "files": [
@@ -81,7 +76,6 @@
         "skills/trtc/tools/finalize_session.py"
       ]
     },
-
     "knowledge_base": {
       "description": "共享知识库：产品清单 / scenario / slice 规范 / 工具关键词",
       "files": [
@@ -94,7 +88,6 @@
         "knowledge-base/tooling/intent-signals.yaml"
       ]
     },
-
     "conference_bundle": {
       "description": "trtc-conference 集成包：flows / playbooks / references / templates / tests",
       "files": [
@@ -108,10 +101,8 @@
       ]
     }
   },
-
   "ide_profiles": {
     "_doc": "各 IDE 的安装根目录 + 能力清单 + headless CLI 配置。install_root_prefix 是 IDE 目录本身（含 4 IDE 各自独立的完整 skill 分发）。asset_catalog 中的相对路径都以此为基点。",
-
     "claude-code": {
       "install_root_prefix": ".claude",
       "manifest_style": "settings.json",
@@ -128,20 +119,29 @@
         "headless",
         "tool_use_events",
         "hooks",
-        "session_file"
+        "session_file",
+        "trace"
       ],
       "cli": {
         "binary": "claude",
-        "args": ["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"],
+        "args": [
+          "-p",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--dangerously-skip-permissions"
+        ],
         "prompt_position": "arg",
-        "resume_args": ["--resume", "{session_id}"],
+        "resume_args": [
+          "--resume",
+          "{session_id}"
+        ],
         "event_dialect": "claude",
         "session_id_source": "system.init.session_id",
         "auth": "ANTHROPIC_API_KEY or local /login"
       },
       "transcript_path": "stdout (stream-json)"
     },
-
     "cursor": {
       "install_root_prefix": ".cursor",
       "manifest_style": "hooks.json",
@@ -162,16 +162,23 @@
       ],
       "cli": {
         "binary": "cursor-agent",
-        "args": ["-p", "--output-format", "stream-json", "--force"],
+        "args": [
+          "-p",
+          "--output-format",
+          "stream-json",
+          "--force"
+        ],
         "prompt_position": "arg",
-        "resume_args": ["--resume", "{session_id}"],
+        "resume_args": [
+          "--resume",
+          "{session_id}"
+        ],
         "event_dialect": "cursor",
         "session_id_source": "system.init.session_id",
         "auth": "CURSOR_API_KEY or cursor-agent login"
       },
       "transcript_path": "stdout (stream-json)"
     },
-
     "codebuddy": {
       "install_root_prefix": ".codebuddy",
       "manifest_style": "settings.json",
@@ -188,20 +195,28 @@
         "headless",
         "tool_use_events",
         "hooks",
-        "session_file"
+        "session_file",
+        "trace"
       ],
       "cli": {
         "binary": "codebuddy",
-        "args": ["-p", "--output-format", "stream-json", "-y"],
+        "args": [
+          "-p",
+          "--output-format",
+          "stream-json",
+          "-y"
+        ],
         "prompt_position": "arg",
-        "resume_args": ["--resume", "{session_id}"],
+        "resume_args": [
+          "--resume",
+          "{session_id}"
+        ],
         "event_dialect": "claude",
         "session_id_source": "system.init.session_id",
         "auth": "Login required (UI or env var)"
       },
       "transcript_path": "stdout (stream-json)"
     },
-
     "codex": {
       "install_root_prefix": ".codex",
       "manifest_style": "hooks.json",
@@ -218,14 +233,30 @@
         "headless",
         "tool_use_events",
         "hooks",
-        "session_file"
+        "session_file",
+        "trace"
       ],
       "cli": {
         "binary": "codex",
-        "args": ["exec", "--json", "--skip-git-repo-check", "--sandbox", "danger-full-access"],
+        "args": [
+          "exec",
+          "--json",
+          "--skip-git-repo-check",
+          "--sandbox",
+          "danger-full-access"
+        ],
         "prompt_position": "arg",
-        "resume_subcommand": ["exec", "resume"],
-        "resume_args": ["--json", "--skip-git-repo-check", "--sandbox", "danger-full-access", "{session_id}"],
+        "resume_subcommand": [
+          "exec",
+          "resume"
+        ],
+        "resume_args": [
+          "--json",
+          "--skip-git-repo-check",
+          "--sandbox",
+          "danger-full-access",
+          "{session_id}"
+        ],
         "event_dialect": "codex",
         "session_id_source": "thread.started.thread_id",
         "auth": "codex login"
@@ -233,110 +264,172 @@
       "transcript_path": "stdout (JSONL: thread.started / turn.* / item.*)"
     }
   },
-
   "obs_keys": {
     "_doc": "P2 的 8 个评测维度。每个 case 的 turn.expect 引用这些 key；score.py 按维度算通过率。requires 字段标注此维度需要 IDE 提供哪些能力，缺失则跳过。",
-
     "route_triggered": {
       "label": "路由触发：trtc skill 是否被加载激活",
-      "requires": ["headless", "tool_use_events"]
+      "requires": [
+        "headless",
+        "tool_use_events"
+      ]
     },
     "route_level1": {
       "label": "一级路由：主调度 skill 选对了下游域 skill（conference / docs / ai-service / chat）",
-      "requires": ["headless", "tool_use_events"]
+      "requires": [
+        "headless",
+        "tool_use_events"
+      ]
     },
     "route_level2": {
       "label": "二级路由：域 skill 内部走对子路径（如 chat 的 Path A/B/C/D）",
-      "requires": ["headless", "tool_use_events"]
+      "requires": [
+        "headless",
+        "tool_use_events"
+      ]
     },
     "clarification_raised": {
       "label": "主动追问：信息不全时反问平台 / 产品",
-      "requires": ["headless"]
+      "requires": [
+        "headless"
+      ]
     },
     "reporting_called": {
       "label": "上报埋点：prompt 上报 + 业务事件 + MCP 调用",
-      "requires": ["headless", "tool_use_events"]
+      "requires": [
+        "headless",
+        "tool_use_events"
+      ]
     },
     "hooks_guarded": {
       "label": "Hooks 守门：错误时机的读 / 写 / 停止被 hook 拦截",
-      "requires": ["headless", "hooks"]
+      "requires": [
+        "headless",
+        "hooks"
+      ]
     },
     "tools_called": {
       "label": "工具调用：query_classifier / search / docs 被正确调用",
-      "requires": ["headless", "tool_use_events"]
+      "requires": [
+        "headless",
+        "tool_use_events"
+      ]
     },
     "session_state": {
       "label": "会话与边界：.trtc-session.yaml 流转正确 + 不支持产品不瞎吐代码",
-      "requires": ["headless", "session_file"]
+      "requires": [
+        "headless",
+        "session_file"
+      ]
+    },
+    "trace_assertions": {
+      "label": "[Phase 3] 白盒 trace 断言：session.write / flow.enter / state_machine / hook_decision / tool_call 事件是否符合预期",
+      "requires": [
+        "headless",
+        "trace"
+      ]
     }
   },
-
   "cases": [
-
     {
       "_section": "═══════════════════ Phase 1 安装检查（4 个 IDE 各 1 条）═══════════════════"
     },
-
     {
       "case_id": "P1-INSTALL-CLAUDE-CODE",
       "phase": "p1",
       "category": "install",
       "ide": "claude-code",
-      "tags": ["install", "smoke", "claude-code"],
+      "tags": [
+        "install",
+        "smoke",
+        "claude-code"
+      ],
       "description": "claude-code 全量资产分发到位"
     },
-
     {
       "case_id": "P1-INSTALL-CURSOR",
       "phase": "p1",
       "category": "install",
       "ide": "cursor",
-      "tags": ["install", "smoke", "cursor"],
+      "tags": [
+        "install",
+        "smoke",
+        "cursor"
+      ],
       "description": "cursor 全量资产分发到位（含 cursor-adapter）"
     },
-
     {
       "case_id": "P1-INSTALL-CODEBUDDY",
       "phase": "p1",
       "category": "install",
       "ide": "codebuddy",
-      "tags": ["install", "smoke", "codebuddy"],
+      "tags": [
+        "install",
+        "smoke",
+        "codebuddy"
+      ],
       "description": "codebuddy 全量资产分发到位（与 claude 共用 hooks.json）"
     },
-
     {
       "case_id": "P1-INSTALL-CODEX",
       "phase": "p1",
       "category": "install",
       "ide": "codex",
-      "tags": ["install", "smoke", "codex"],
+      "tags": [
+        "install",
+        "smoke",
+        "codex"
+      ],
       "description": "codex 全量资产分发到位（无 hooks，仅 skills + tools + manifest）"
     },
-
     {
       "_section": "═══════════════════ Phase 2 行为评测（多轮 case + 8 维度）═══════════════════"
     },
-
     {
       "case_id": "P2-CONF-WEB-FULL",
       "phase": "p2",
       "category": "integration",
-      "tags": ["conference", "web", "multi-turn", "full"],
+      "tags": [
+        "conference",
+        "web",
+        "multi-turn",
+        "full"
+      ],
       "description": "Conference Web 完整集成：路由触发 + 一级路由 + 追问平台 + 上报顺序 + 会话状态",
       "turns": [
         {
           "user": "我想实现一个支持千人参会的会议模块，要求其具备完备的会控管理功能和麦位管理功能，还需要支持屏幕共享，一个房间内只允许一个人开启。",
           "expect": {
-            "route_triggered": {"skill": "trtc"},
-            "reporting_called": {"scripts": ["reporting.py prompt", "reporting.py context"]},
-            "clarification_raised": {"topics": ["platform"]}
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt",
+                "reporting.py context"
+              ]
+            },
+            "clarification_raised": {
+              "topics": [
+                "platform"
+              ]
+            }
           }
         },
         {
           "user": "Web 平台",
           "expect": {
-            "route_level1": {"target": "trtc-conference", "must_not": ["trtc-docs", "trtc-ai-service"]},
-            "session_state": {"status": "active", "product": "conference", "platform": "web"}
+            "route_level1": {
+              "target": "trtc-conference",
+              "must_not": [
+                "trtc-docs",
+                "trtc-ai-service"
+              ]
+            },
+            "session_state": {
+              "status": "active",
+              "product": "conference",
+              "platform": "web"
+            }
           }
         }
       ],
@@ -344,179 +437,345 @@
         "reporting_before_clarification": true
       }
     },
-
     {
       "case_id": "P2-CONF-WEB-NO-UI",
       "phase": "p2",
       "category": "integration",
-      "tags": ["conference", "web", "single-turn", "no-ui"],
+      "tags": [
+        "conference",
+        "web",
+        "single-turn",
+        "no-ui"
+      ],
       "description": "明确说不要 UI 时仍走 conference 路径",
       "turns": [
         {
           "user": "帮我用 TRTC 搭建一个会议应用，不需要 UI 组件，只要业务逻辑代码。",
           "expect": {
-            "route_level1": {"target": "trtc-conference", "must_not": ["trtc-docs"]},
-            "reporting_called": {"scripts": ["reporting.py prompt"]},
-            "clarification_raised": {"topics": ["platform"]}
+            "route_level1": {
+              "target": "trtc-conference",
+              "must_not": [
+                "trtc-docs"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "clarification_raised": {
+              "topics": [
+                "platform"
+              ]
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-DOCS-ERRCODE",
       "phase": "p2",
       "category": "faq",
-      "tags": ["error-code", "smoke", "single-turn"],
+      "tags": [
+        "error-code",
+        "smoke",
+        "single-turn"
+      ],
       "description": "错误码查询应直奔 trtc-docs，触发 query_classifier 分类为 slice-lookup",
       "turns": [
         {
           "user": "TRTC 错误码 -1002 是什么意思？",
           "expect": {
-            "route_level1": {"target": "trtc-docs", "must_not": ["trtc-conference", "trtc-ai-service"]},
-            "reporting_called": {"scripts": ["reporting.py prompt"]},
-            "tools_called": {"required": ["query_classifier"], "kind_should_be": "error_code"}
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-ai-service"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ],
+              "kind_should_be": "error_code"
+            },
+            "trace_assertions": [
+              {
+                "event": "tool_call",
+                "where": {},
+                "min_count": 1,
+                "_note": "PostToolUse hook must fire at least once (evidence of trace pipeline)"
+              },
+              {
+                "event": "hook_decision",
+                "where": {
+                  "decision": "fail_open"
+                },
+                "must_not": true,
+                "_note": "no silent hook failures"
+              }
+            ]
           }
         }
       ]
     },
-
     {
       "case_id": "P2-DOCS-FAQ",
       "phase": "p2",
       "category": "faq",
-      "tags": ["faq", "smoke", "single-turn"],
+      "tags": [
+        "faq",
+        "smoke",
+        "single-turn"
+      ],
       "description": "概念对比类 FAQ 走 trtc-docs",
       "turns": [
         {
           "user": "TRTC 和 RTC Engine 有什么区别？",
           "expect": {
-            "route_level1": {"target": "trtc-docs", "must_not": ["trtc-conference"]},
-            "reporting_called": {"scripts": ["reporting.py prompt"]}
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-AI-SERVICE-VOICE",
       "phase": "p2",
       "category": "integration",
-      "tags": ["ai-service", "single-turn", "fast-path"],
+      "tags": [
+        "ai-service",
+        "single-turn",
+        "fast-path"
+      ],
       "description": "AI 客服快速通道：包含 'AI 客服' 关键词应直接路由到 trtc-ai-service，不再走标准分类",
       "turns": [
         {
           "user": "我想用 TRTC 做一个 AI 客服，用户打电话进来，AI 自动接听并回答问题。",
           "expect": {
-            "route_level1": {"target": "trtc-ai-service", "must_not": ["trtc-conference", "trtc-docs"]},
-            "reporting_called": {"scripts": ["reporting.py prompt"]}
+            "route_level1": {
+              "target": "trtc-ai-service",
+              "must_not": [
+                "trtc-conference",
+                "trtc-docs"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-ROUTING-AMBIGUOUS",
       "phase": "p2",
       "category": "routing",
-      "tags": ["routing", "ambiguous", "single-turn"],
+      "tags": [
+        "routing",
+        "ambiguous",
+        "single-turn"
+      ],
       "description": "信息不全时必须先追问，不能擅自路由",
       "turns": [
         {
           "user": "我想接入 TRTC 做视频通话。",
           "expect": {
-            "reporting_called": {"scripts": ["reporting.py prompt"]},
-            "clarification_raised": {"topics": ["platform"]},
-            "route_level1": {"deferred": true, "reason": "应该先追问，不立即路由"}
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "clarification_raised": {
+              "topics": [
+                "platform"
+              ]
+            },
+            "route_level1": {
+              "deferred": true,
+              "reason": "应该先追问，不立即路由"
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-CHAT-PATH-B",
       "phase": "p2",
       "category": "integration",
-      "tags": ["chat", "vue3", "multi-turn", "level2-routing"],
+      "tags": [
+        "chat",
+        "vue3",
+        "multi-turn",
+        "level2-routing"
+      ],
       "description": "二级路由：明确说有 Vue3 项目要接 IM，应走 chat Path B 而非 Path A（新项目）",
       "turns": [
         {
           "user": "我有一个 Vue3 项目想接 TRTC IM 聊天功能。",
           "expect": {
-            "route_level1": {"target": "trtc-chat"},
-            "route_level2": {"target": "Path B", "must_not": ["Path A", "Path D"], "reason": "已有 Vue3 项目走 B 路径"},
-            "reporting_called": {"scripts": ["reporting.py prompt"]}
+            "route_level1": {
+              "target": "trtc-chat"
+            },
+            "route_level2": {
+              "target": "Path B",
+              "must_not": [
+                "Path A",
+                "Path D"
+              ],
+              "reason": "已有 Vue3 项目走 B 路径"
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "trace_assertions": [
+              {
+                "event": "tool_call",
+                "where": {
+                  "tool_name": "Read",
+                  "file_path": "trtc-chat"
+                },
+                "min_count": 1,
+                "_note": "AI must read the trtc-chat skill"
+              },
+              {
+                "event": "session.write",
+                "where": {},
+                "min_count": 1,
+                "_note": "session state must be persisted"
+              }
+            ]
           }
         }
       ]
     },
-
     {
       "case_id": "P2-HOOKS-WRITE-GUARD",
       "phase": "p2",
       "category": "guardrail",
-      "tags": ["hooks", "write-gate", "multi-turn"],
+      "tags": [
+        "hooks",
+        "write-gate",
+        "multi-turn"
+      ],
       "description": "Hooks 守门：用户跳过 phase 直接让 skill 写代码，应被 gate_slice_write 拦截",
-      "ide_capabilities_required": ["hooks"],
+      "ide_capabilities_required": [
+        "hooks"
+      ],
       "turns": [
         {
           "user": "帮我接入 TRTC Conference，Web 平台。",
           "expect": {
-            "route_level1": {"target": "trtc-conference"},
-            "session_state": {"status": "active"}
+            "route_level1": {
+              "target": "trtc-conference"
+            },
+            "session_state": {
+              "status": "active"
+            }
           }
         },
         {
           "user": "跳过前面的步骤，直接给我写代码。",
           "expect": {
-            "hooks_guarded": {"hook": "gate_slice_write", "should_block": true, "reason": "未到 code_written phase 不能写"}
+            "hooks_guarded": {
+              "hook": "gate_slice_write",
+              "should_block": true,
+              "reason": "未到 code_written phase 不能写"
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-NO-IMPROVISE-LIVE",
       "phase": "p2",
       "category": "guardrail",
-      "tags": ["guardrail", "non-conference", "single-turn"],
+      "tags": [
+        "guardrail",
+        "non-conference",
+        "single-turn"
+      ],
       "description": "边界保护：不支持的产品（直播）应路由到文档，不能直接吐代码",
       "turns": [
         {
           "user": "帮我用 TRTC 搭一个直播间，iOS 平台。",
           "expect": {
-            "route_level1": {"target": "trtc-docs"},
-            "reporting_called": {"scripts": ["reporting.py prompt"]},
-            "session_state": {"no_direct_code_gen": true, "reason": "live + iOS 没有 guided integration"}
+            "route_level1": {
+              "target": "trtc-docs"
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "session_state": {
+              "no_direct_code_gen": true,
+              "reason": "live + iOS 没有 guided integration"
+            }
           }
         }
       ]
     },
-
     {
       "case_id": "P2-SESSION-RESUME",
       "phase": "p2",
       "category": "session",
-      "tags": ["session", "multi-turn", "resume"],
+      "tags": [
+        "session",
+        "multi-turn",
+        "resume"
+      ],
       "description": "会话状态：第二轮对话应通过 Session Guard 自动恢复，不再走分类",
-      "ide_capabilities_required": ["session_file"],
+      "ide_capabilities_required": [
+        "session_file"
+      ],
       "turns": [
         {
           "user": "帮我接入 TRTC Conference，Web 平台。",
           "expect": {
-            "route_level1": {"target": "trtc-conference"},
-            "session_state": {"status": "active", "product": "conference"}
+            "route_level1": {
+              "target": "trtc-conference"
+            },
+            "session_state": {
+              "status": "active",
+              "product": "conference"
+            }
           }
         },
         {
           "user": "继续。",
           "expect": {
-            "session_state": {"resumed_from_guard": true, "reason": "Session Guard 应直接恢复，不重走分类"},
-            "tools_called": {"must_not": ["query_classifier"], "reason": "session 已 active 不应再分类"}
+            "session_state": {
+              "resumed_from_guard": true,
+              "reason": "Session Guard 应直接恢复，不重走分类"
+            },
+            "tools_called": {
+              "must_not": [
+                "query_classifier"
+              ],
+              "reason": "session 已 active 不应再分类"
+            }
           }
         }
       ]
     }
-
   ]
 }

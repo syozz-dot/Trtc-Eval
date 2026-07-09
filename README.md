@@ -10,6 +10,7 @@
 |---|---|---|
 | skill 装得对吗？ | **P1** — 装齐检查 | 4 家 IDE 目录里的资产文件是否全在正确位置 |
 | skill 用得对吗？ | **P2** — 行为评测 | 跑真实 prompt，观察路由 / hooks / 工具调用是否符合预期 |
+| skill 内部契约守住了吗？ | **P3** — 白盒 trace（可选）| 读 `~/.cache/trtc-traces/` 里的事件流，断言"AI 真读了某文件 / hook 没 fail_open" |
 
 ---
 
@@ -36,6 +37,10 @@
 ### 🛠 我要加 case / 加 IDE / 换 fixture
 
 看 [`SOP.md · 维护 / 重装场景`](./SOP.md#4-维护--重装场景)。
+
+### 🔬 我想加白盒 trace 断言（Phase 3）
+
+看 [`SOP.md · 附录 A · Phase 3`](./SOP.md#附录-a--phase-3-白盒-trace-评测)。用 `python3 run_eval.py --with-trace ...` 激活。
 
 ---
 
@@ -84,6 +89,9 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml --format markdown
 
 # 免费额度自检（30 秒验证 CLI 事件流可解析）
 python3 run_eval.py --ide cursor --probe
+
+# Phase 3：加白盒 trace 断言（读 ~/.cache/trtc-traces/）
+python3 run_eval.py --ide claude-code --case P2-DOCS-ERRCODE --with-trace
 
 # 一键装 pre-commit hook（扫敏感信息）
 ./scripts/install-hooks.sh

@@ -554,6 +554,109 @@ def _match_session_state(transcript: ParsedTranscript, expect: dict, working_dir
     return True, f"session state matches ({session_file.name})"
 
 
+def _load_trace_events(working_dir: Path) -> list[dict]:
+    """Read every jsonl in ~/.cache/trtc-traces/ that this eval run just
+    populated. We can't easily tell which sid belongs to which case here
+    (that info sits in run_case), so trace_assertions is evaluated against
+    the full trace corpus produced during this run. That's usually fine —
+    each case's session is cleared before it starts, so events for one case
+    end up in one sid file.
+    """
+    import os
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    trace_dir = Path(base) / "trtc-traces"
+    if not trace_dir.exists():
+        return []
+
+    # Only consider files touched in the last 10 minutes to avoid stale
+    # events from previous runs polluting this evaluation.
+    import time
+    cutoff = time.time() - 600
+    events: list[dict] = []
+    for p in trace_dir.glob("*.jsonl"):
+        try:
+            if p.stat().st_mtime < cutoff:
+                continue
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            continue
+    return events
+
+
+def _match_trace_assertions(detail, working_dir: Path) -> tuple[bool, str]:
+    """[Phase 3] Verify white-box trace events.
+
+    `detail` is a list of assertion dicts (or a single dict). Each dict:
+
+      {
+        "event":        "tool_call" | "hook_decision" | "flow.enter" | ...
+        "where":        { <field>: <expected value or substring for str> },
+                        // AND-matched; substring test for strings, equality otherwise
+        "min_count":    int,   // default 1  (at least this many events match)
+        "max_count":    int,   // optional   (at most this many)
+        "must_not":     bool,  // if true, min/max default to 0 (event MUST NOT occur)
+      }
+
+    Returns (ok, reason). Assertions are AND-combined.
+    """
+    if not isinstance(detail, list):
+        detail = [detail]
+
+    events = _load_trace_events(working_dir)
+    if not events:
+        return False, "no trace events found — did you pass --with-trace?"
+
+    def _matches(ev: dict, where: dict) -> bool:
+        for k, v in (where or {}).items():
+            got = ev.get(k)
+            if isinstance(v, str) and isinstance(got, str):
+                if v not in got:
+                    return False
+            else:
+                if got != v:
+                    return False
+        return True
+
+    failures: list[str] = []
+    for i, a in enumerate(detail):
+        if not isinstance(a, dict):
+            failures.append(f"assertion #{i}: not a dict ({a!r})")
+            continue
+        event_type = a.get("event")
+        where = a.get("where", {})
+        must_not = a.get("must_not", False)
+        min_c = a.get("min_count", 0 if must_not else 1)
+        max_c = a.get("max_count")
+
+        matched = [
+            ev for ev in events
+            if ev.get("event") == event_type and _matches(ev, where)
+        ]
+        n = len(matched)
+
+        if must_not and n > 0:
+            failures.append(f"[{event_type}] must_not but found {n} matching event(s): {where}")
+            continue
+
+        if n < min_c:
+            failures.append(f"[{event_type}] want ≥{min_c}, got {n} where={where}")
+            continue
+
+        if max_c is not None and n > max_c:
+            failures.append(f"[{event_type}] want ≤{max_c}, got {n} where={where}")
+
+    if failures:
+        return False, " | ".join(failures)
+    return True, f"all {len(detail)} trace assertion(s) satisfied"
+
+
 # ── 判定分派 ────────────────────────────────────────────────────────────────
 
 def evaluate_observation(
@@ -566,8 +669,10 @@ def evaluate_observation(
     对一个 (obs_key, expected_detail) 做自动判定。
     返回 (verdict, reason) — verdict 是 "Y" / "N" / "S"（S = 无法判定）。
     """
-    if not isinstance(detail, dict):
-        return ("S", f"non-dict expect: {detail!r}")
+    # Most obs_keys use dict details; trace_assertions uses a list. Only reject
+    # obviously wrong shapes (scalars) — matchers handle their own type check.
+    if not isinstance(detail, (dict, list)):
+        return ("S", f"non-dict/list expect: {detail!r}")
 
     try:
         if obs_key == "route_triggered":
@@ -618,6 +723,10 @@ def evaluate_observation(
             ok, reason = _match_session_state(transcript, detail, working_dir)
             return ("Y" if ok else "N", reason)
 
+        if obs_key == "trace_assertions":
+            ok, reason = _match_trace_assertions(detail, working_dir)
+            return ("Y" if ok else "N", reason)
+
         return ("S", f"no matcher for obs_key={obs_key}")
 
     except Exception as e:
@@ -652,6 +761,32 @@ def clear_sessions(working_dir: Path) -> int:
             except OSError:
                 pass
     return n
+
+
+def read_trtc_session_id(working_dir: Path) -> str | None:
+    """Peek at the current .trtc-session.yaml (any IDE-flavoured location)
+    and return its session_id field. Used by Phase 3 to know which trace
+    jsonl to archive after a case finishes.
+
+    Returns None if no session file exists yet or it lacks a session_id
+    (some very-early onboarding turns write session state before assigning
+    an id — that's fine, tool_call events for that turn use fallback ids).
+    """
+    for rel in SESSION_FILE_GLOBS:
+        p = working_dir / rel
+        if not p.exists():
+            continue
+        try:
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if line.startswith("session_id:"):
+                    val = line.split(":", 1)[1].strip().strip("'\"")
+                    if val:
+                        return val
+        except OSError:
+            continue
+    return None
+
 
 
 
@@ -982,6 +1117,18 @@ def run_case(
         entry["case_level"] = {k: "S" for k in case_level}
 
     entry["notes"] = f"auto by run_eval.py; {len(turns)} turn(s)"
+
+    # Phase 3 hook: capture the trtc session id that the skill wrote during
+    # this case, so main() can archive the matching trace jsonl.
+    # Also capture the harness (CLI conversation) id — the PostToolUse hook
+    # falls back to it when .trtc-session.yaml doesn't exist yet (e.g. cases
+    # that short-circuit before the skill's session_manager creates one).
+    trtc_sid = read_trtc_session_id(working_dir)
+    if trtc_sid:
+        entry["_trtc_session_id"] = trtc_sid   # stripped before dump_results_yaml
+    if session_id:
+        entry["_harness_session_id"] = session_id  # ditto
+
     return entry
 
 
@@ -1008,6 +1155,15 @@ def main() -> int:
     parser.add_argument("--model", default=None,
                         help="完整评测使用的模型（CI 便宜档常用：haiku / gpt-4o-mini / claude-haiku-4.5）；"
                              " claude/cursor/codebuddy 走 --model，codex 走 -c model=...")
+    parser.add_argument("--with-trace", action="store_true",
+                        help="[Phase 3] Enable white-box trace assertions. Injects a PostToolUse "
+                             "hook (via phase3/eval_runner.py) so every Read/Write/Edit/Bash tool "
+                             "call is recorded as a `tool_call` event alongside the 4 basic event "
+                             "types already emitted by the skill (session.write / flow.enter / "
+                             "state_machine.* / hook_decision). Traces are archived to "
+                             "<out-dir>/traces/ after the run. Zero effect on end users — the hook "
+                             "is only injected into <working_dir>/.claude/settings.json for the "
+                             "duration of this eval process and restored on exit.")
     args = parser.parse_args()
 
     if args.dry_run and args.probe:
@@ -1062,6 +1218,20 @@ def main() -> int:
     transcript_dir = out_dir / "transcripts"
     transcript_dir.mkdir(exist_ok=True)
 
+    # ── Phase 3: inject trace hook if requested ────────────────────────
+    trace_session_ids: list[str] = []
+    if args.with_trace and not args.dry_run:
+        # cursor lacks PostToolUse — trace hook won't fire; warn but proceed
+        # (users still get session.write / flow.enter / state_machine / hook_decision
+        # from the skill's own emit_trace).
+        if args.ide == "cursor":
+            print("[run_eval] ⚠ --with-trace on cursor: PostToolUse events won't fire "
+                  "(Cursor gap). Basic 4 event types still available.", flush=True)
+        sys.path.insert(0, str(HERE / "phase3"))
+        from eval_runner import inject as trace_inject  # noqa: E402
+        trace_inject(working_dir)
+        print(f"[run_eval] trace hook injected → {working_dir}/.claude/settings.json", flush=True)
+
     print(f"[run_eval] IDE: {args.ide}")
     print(f"[run_eval] working dir: {working_dir}")
     print(f"[run_eval] out dir: {out_dir}")
@@ -1075,6 +1245,25 @@ def main() -> int:
             dry_run=args.dry_run,
             keep_session=args.keep_session,
         ))
+
+    # ── Phase 3: archive trace files + strip internal keys from yaml ────
+    if args.with_trace and not args.dry_run:
+        from eval_runner import archive_traces  # noqa: E402
+        # Collect both the trtc session id (populated when the skill runs its
+        # session_manager) and the harness/CLI conversation id (used as
+        # fallback by the PostToolUse hook when no trtc session exists yet).
+        session_ids: list[str] = []
+        for e in entries:
+            for key in ("_trtc_session_id", "_harness_session_id"):
+                sid = e.pop(key, None)
+                if sid:
+                    session_ids.append(sid)
+        archived = archive_traces(session_ids, out_dir)
+        print(f"[run_eval] archived {len(archived)} trace file(s) → {out_dir}/traces/", flush=True)
+    else:
+        for e in entries:
+            e.pop("_trtc_session_id", None)
+            e.pop("_harness_session_id", None)
 
     # 写 results yaml
     from datetime import datetime
