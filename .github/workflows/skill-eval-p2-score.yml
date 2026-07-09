@@ -94,10 +94,12 @@ jobs:
               echo ""
               echo "$BASELINE_NOTE"
               echo ""
-              # --format markdown emits a case table + collapsible rules
-              # Do NOT swallow failures — pyyaml is installed, so a non-zero
-              # exit here is a real problem worth surfacing in the report.
-              python3 score.py "$f" --cases cases.json --format markdown $BASELINE_ARG
+              # score.py exits 1 when a case has hard-fail observations.
+              # For this workflow (report-only, no gating) that's not a
+              # workflow failure — we still want the markdown report posted
+              # so a reviewer can see WHAT failed. The report's ✅/❌ callout
+              # at the top makes the pass/fail state obvious.
+              python3 score.py "$f" --cases cases.json --format markdown $BASELINE_ARG || true
               echo ""
             } >> "$REPORT"
           done
