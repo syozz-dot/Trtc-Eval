@@ -38,6 +38,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Python deps
+        run: pip install pyyaml
+
       - name: Discover results in this PR
         id: discover
         run: |
@@ -56,10 +59,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/score-report
-          echo "# P2 Eval Score Report" > /tmp/score-report/comment.md
-          echo "" >> /tmp/score-report/comment.md
-          echo "Committed by \`$GITHUB_HEAD_REF\`, scored by CI. No API keys used." >> /tmp/score-report/comment.md
-          echo "" >> /tmp/score-report/comment.md
+          REPORT=/tmp/score-report/comment.md
+          {
+            echo "# P2 Eval Score Report"
+            echo ""
+            echo "Committed by \`$GITHUB_HEAD_REF\`, scored by CI. No API keys used."
+            echo ""
+          } > "$REPORT"
 
           for f in ${{ steps.discover.outputs.files }}; do
             if [ ! -f "$f" ]; then continue; fi
@@ -88,14 +94,20 @@ jobs:
               echo ""
               echo "$BASELINE_NOTE"
               echo ""
-              echo '```'
-              python3 score.py "$f" --cases cases.json $BASELINE_ARG || true
-              echo '```'
+              # --format markdown emits a case table + collapsible rules
+              # Do NOT swallow failures — pyyaml is installed, so a non-zero
+              # exit here is a real problem worth surfacing in the report.
+              python3 score.py "$f" --cases cases.json --format markdown $BASELINE_ARG
               echo ""
-            } >> /tmp/score-report/comment.md
+            } >> "$REPORT"
           done
 
-          cat /tmp/score-report/comment.md
+          echo "── final report ──"
+          cat "$REPORT"
+
+          # Publish to the Actions run summary page so users don't need to
+          # jump to the PR to see the scoreboard.
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post scoreboard to PR
         if: steps.discover.outputs.files != ''

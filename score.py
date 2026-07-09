@@ -454,6 +454,138 @@ def print_report(results: list[CaseResult], meta: dict, baseline: dict | None) -
     print(f"{'─' * W}\n")
 
 
+def format_report_markdown(results: list[CaseResult], meta: dict, baseline: dict | None) -> str:
+    """Render the same data print_report emits, but as GitHub-flavored markdown.
+
+    Layout:
+      - status callout line (✅ / ❌ / ⚠️)
+      - summary sentence
+      - case table (Case | Score | Result | 观察点)
+      - <details> collapsible for evaluation rules
+      - fail detail section (only if any hard-failed)
+      - minor-concern list (only if any soft-failed)
+      - baseline delta line (only if baseline present)
+    """
+    ide = meta.get("ide", "?")
+    tester = meta.get("tester", "?")
+    date = meta.get("date", "?")
+
+    scored = [r for r in results if r.status in ("pass", "fail")]
+    n_pass = sum(1 for r in results if r.status == "pass")
+    n_fail = sum(1 for r in results if r.status == "fail")
+    n_incomplete = sum(1 for r in results if r.status == "incomplete")
+    n_skipped = sum(1 for r in results if r.status == "skipped_capability")
+    n_critical = sum(1 for r in results if r.critical_failed)
+    avg = sum(r.score for r in scored) / len(scored) if scored else 0.0
+
+    if n_critical:
+        headline = f"❌ **{n_critical} critical fail** · {n_fail} fail · {n_pass} pass"
+    elif n_fail:
+        headline = f"❌ **{n_fail} fail** · {n_pass} pass"
+    elif n_incomplete:
+        headline = f"⚠️ **{n_incomplete} incomplete** · {n_pass} pass"
+    else:
+        headline = f"✅ **{n_pass}/{len(results)} pass** · avg={avg:.2f}"
+
+    lines: list[str] = []
+    lines.append(f"**IDE:** `{ide}`   **测试人:** `{tester}`   **日期:** `{date}`")
+    lines.append("")
+    lines.append(headline)
+    lines.append("")
+
+    # ── Case table ──────────────────────────────────────────────────────────
+    lines.append("| Case | Result | Score | 观察点 |")
+    lines.append("|---|---|---|---|")
+
+    baseline_cases = {c["case_id"]: c for c in (baseline or {}).get("cases", [])}
+
+    def _obs_summary(r: CaseResult) -> str:
+        """Compact one-cell observation summary, tier icons preserved."""
+        parts: list[str] = []
+        for d in r.dims:
+            key = d.key.replace("case:", "")
+            if d.status == "pass":
+                parts.append(f"✓ {key}")
+            elif d.status == "fail":
+                mark = "★" if d.tier == "critical" else ("·" if d.tier == "minor" else "")
+                parts.append(f"✗ {mark}{key}".strip())
+            elif d.status == "skip_capability":
+                parts.append(f"─ {key} (跳过)")
+            elif d.status == "unfilled":
+                parts.append(f"? {key}")
+        return " · ".join(parts) if parts else "—"
+
+    for r in results:
+        if r.status == "pass":
+            result_cell = "✅ pass" + (f" ({len(r.soft_failed)} concern)" if r.soft_failed else "")
+        elif r.status == "fail":
+            result_cell = "❌ CRITICAL" if r.critical_failed else "❌ fail"
+        elif r.status == "incomplete":
+            result_cell = "⚠️ incomplete"
+        elif r.status == "skipped_capability":
+            result_cell = "⊘ skipped"
+        else:
+            result_cell = r.status
+
+        score_cell = f"{r.score:.2f}" if r.status in ("pass", "fail") else "—"
+
+        # baseline delta arrow inline with score
+        prev = baseline_cases.get(r.case_id)
+        if prev and r.status in ("pass", "fail"):
+            prev_sig = _structure_signature(prev)
+            curr_sig = _current_structure(r)
+            if prev_sig == curr_sig:
+                delta = r.score - prev.get("score", 0.0)
+                arrow = "↑" if delta > 0.01 else ("↓" if delta < -0.01 else "→")
+                score_cell = f"{r.score:.2f} {arrow}"
+
+        lines.append(f"| `{r.case_id}` | {result_cell} | {score_cell} | {_obs_summary(r)} |")
+
+    lines.append("")
+
+    # ── Fail detail (only if any) ────────────────────────────────────────────
+    failed = [r for r in results if r.status == "fail"]
+    if failed:
+        lines.append("### ❌ FAIL 明细")
+        lines.append("")
+        for r in failed:
+            marker = "**★ CRITICAL**" if r.critical_failed else "**FAIL**"
+            lines.append(f"- {marker} `{r.case_id}`: {r.fail_reason}")
+        lines.append("")
+
+    # ── Minor concern (only if any) ─────────────────────────────────────────
+    concerns = [r for r in results if r.status == "pass" and r.soft_failed]
+    if concerns:
+        lines.append("### 待关注（不影响 pass）")
+        lines.append("")
+        for r in concerns:
+            keys = ", ".join(f"`{_dim_ref(d)}`" for d in r.soft_failed)
+            lines.append(f"- `{r.case_id}`: {keys}")
+        lines.append("")
+
+    # ── Baseline overall delta ──────────────────────────────────────────────
+    if baseline:
+        prev_scored = [c for c in baseline.get("cases", []) if c.get("status") in ("pass", "fail")]
+        prev_avg = sum(c.get("score", 0.0) for c in prev_scored) / max(len(prev_scored), 1)
+        d = avg - prev_avg
+        arrow = "↑" if d > 0.01 else ("↓" if d < -0.01 else "→")
+        lines.append(f"**vs baseline** (`{baseline.get('ide','?')}`): `{prev_avg:.2f} {arrow} {avg:.2f}`")
+        lines.append("")
+
+    # ── Evaluation rules, collapsible so it doesn't dominate ────────────────
+    lines.append("<details><summary>评分规则 · 观察点分类</summary>")
+    lines.append("")
+    lines.append("- **hard 观察点全 Y → pass**；任一 hard N → fail")
+    lines.append(f"- **critical** ({', '.join(sorted(k for k, v in OBS_TIER.items() if v == 'critical'))}) N 时短路 fail")
+    lines.append(f"- **soft** ({', '.join(sorted(SOFT_OBS))}) N 只记录 minor concern，不拖 fail")
+    lines.append(f"- 权重（仅可视化）：critical={TIER_WEIGHT['critical']} · major={TIER_WEIGHT['major']} · minor={TIER_WEIGHT['minor']}")
+    lines.append("")
+    lines.append("</details>")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -463,6 +595,9 @@ def main() -> int:
     parser.add_argument("--cases", default=str(HERE / "cases.json"),
                         help="Path to cases.json (for obs_keys / ide_profiles)")
     parser.add_argument("--out-dir", help="Output directory for summary.json (default: results dir)")
+    parser.add_argument("--format", choices=["cli", "markdown"], default="cli",
+                        help="Output format. 'cli' (default) prints the ANSI-colored console report; "
+                             "'markdown' prints a GitHub-flavored markdown report (used by CI).")
     args = parser.parse_args()
 
     results_path = Path(args.results)
@@ -507,7 +642,7 @@ def main() -> int:
         else:
             print(f"[warn] baseline not found: {bp}", file=sys.stderr)
 
-    print_report(results, meta, baseline)
+    print_report(results, meta, baseline) if args.format == "cli" else print(format_report_markdown(results, meta, baseline))
 
     # summary.json
     scored = [r for r in results if r.status in ("pass", "fail")]
@@ -552,7 +687,8 @@ def main() -> int:
     summary_path = out_dir / f"summary.{ide or 'unknown'}.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f"summary → {summary_path}")
+    # Log the summary path to stderr so stdout stays clean for --format markdown
+    print(f"summary → {summary_path}", file=sys.stderr)
 
     return 0 if n_fail == 0 and summary["incomplete"] == 0 else 1
 

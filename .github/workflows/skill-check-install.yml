@@ -17,9 +17,29 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      npx_target:
+        description: 'npm package to test (default @tencent-rtc/trtc-agent-skills@latest). Set to a specific version like @0.1.7 to pin.'
+        required: false
+        default: '@tencent-rtc/trtc-agent-skills@latest'
+        type: string
+      triggered_by:
+        description: 'Optional label for who kicked this off (e.g. "agent-skills release v0.1.8")'
+        required: false
+        default: ''
+        type: string
+  # Safety-net: catches new @latest publishes that no one dispatched manually.
+  # 03:07 UTC = 11:07 China time; off-peak, staggered to avoid the :00 rush.
+  schedule:
+    - cron: '7 3 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write   # summarize step needs this to post the sticky comment
 
 env:
-  NPX_TARGET: '@tencent-rtc/trtc-agent-skills@latest'
+  # workflow_dispatch input overrides the default; PR / push / schedule falls through.
+  NPX_TARGET: ${{ inputs.npx_target || '@tencent-rtc/trtc-agent-skills@latest' }}
 
 jobs:
   check-install:
@@ -61,10 +81,22 @@ jobs:
           done
 
       - name: Run P1 install check
+        id: p1
         run: |
+          set +e
           python3 "$GITHUB_WORKSPACE/check_install.py" \
             --repo-root /tmp/install-target \
-            --ide "${{ matrix.ide }}"
+            --ide "${{ matrix.ide }}" \
+            2>&1 | tee "/tmp/p1-${{ matrix.ide }}.log"
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload check log for summarize
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-log-${{ matrix.ide }}
+          path: /tmp/p1-${{ matrix.ide }}.log
+          retention-days: 7
 
       - name: Upload install layout on failure
         if: failure()
@@ -74,3 +106,85 @@ jobs:
           path: /tmp/install-target/
           if-no-files-found: ignore
           retention-days: 7
+
+  summarize:
+    name: Summarize P1 results
+    needs: check-install
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all P1 logs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: p1-log-*
+          path: /tmp/p1-logs
+          merge-multiple: false
+
+      - name: Build report
+        id: build
+        run: |
+          set -euo pipefail
+          REPORT=/tmp/p1-report.md
+          # Overall status derived from needs.check-install.result:
+          #   success = every matrix job green; failure = at least one red
+          RESULT="${{ needs.check-install.result }}"
+
+          {
+            echo "# P1 Skill Install Check"
+            echo ""
+            if [ "$RESULT" = "success" ]; then
+              echo "✅ **All 4 IDEs pass** — skill assets fully distributed to \`.claude/\` / \`.cursor/\` / \`.codebuddy/\` / \`.codex/\`."
+              echo ""
+              echo "_No further action needed._"
+              exit 0
+            fi
+            echo "❌ **P1 install check failed on one or more IDEs.**"
+            echo ""
+            echo "| IDE | Result | Missing / Extras |"
+            echo "|---|---|---|"
+
+            for ide in claude-code cursor codebuddy codex; do
+              log_file="/tmp/p1-logs/p1-log-${ide}/p1-${ide}.log"
+              if [ ! -f "$log_file" ]; then
+                echo "| \`$ide\` | ⚠️ log missing | — |"
+                continue
+              fi
+              # Grab the "Missing X/Y" lines that check_install.py emits on fail;
+              # fall back to a generic "see log" pointer.
+              detail=$(grep -E "Missing|extra" "$log_file" | head -5 | sed 's/|/\\|/g' | tr '\n' ' ' || true)
+              if [ -z "$detail" ]; then
+                if grep -q "PASS" "$log_file" 2>/dev/null; then
+                  echo "| \`$ide\` | ✅ pass | — |"
+                else
+                  echo "| \`$ide\` | ❌ fail | see workflow logs |"
+                fi
+              else
+                echo "| \`$ide\` | ❌ fail | \`$detail\` |"
+              fi
+            done
+
+            echo ""
+            echo "<details><summary>What to do</summary>"
+            echo ""
+            echo "1. Check that the skill repository's \`npx add\` command distributes all expected files."
+            echo "2. Compare against \`cases.json\` \`asset_catalog\` / \`ide_profiles.<ide>.asset_groups\`."
+            echo "3. Full CI logs: click through the \`check-install (<ide>)\` job in Actions."
+            echo ""
+            echo "</details>"
+          } > "$REPORT"
+
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+          # Signal to next step whether to actually post to PR
+          if [ "$RESULT" = "success" ]; then
+            echo "post=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "post=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post P1 fail scoreboard to PR
+        if: steps.build.outputs.post == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: p1-install-check
+          path: /tmp/p1-report.md

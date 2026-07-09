@@ -33,7 +33,30 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run regression
-        run: python3 tests/test_parser_regression.py
+        id: reg
+        run: |
+          set +e
+          python3 tests/test_parser_regression.py 2>&1 | tee /tmp/reg.log
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit $rc
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Parser Regression"
+            if [ "${{ steps.reg.outputs.rc }}" = "0" ]; then
+              echo ""
+              echo "✅ All 8 golden fixtures re-parsed and judged **all Y**."
+            else
+              echo ""
+              echo "❌ Fixture regression FAILED. Full log:"
+              echo ""
+              echo '```'
+              cat /tmp/reg.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   secret-scan:
     name: Sensitive info scan
@@ -44,4 +67,27 @@ jobs:
         with:
           python-version: '3.11'
       - name: Scan tree
-        run: python3 scripts/scan_sensitive.py
+        id: scan
+        run: |
+          set +e
+          python3 scripts/scan_sensitive.py 2>&1 | tee /tmp/scan.log
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit $rc
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Sensitive Info Scan"
+            if [ "${{ steps.scan.outputs.rc }}" = "0" ]; then
+              echo ""
+              echo "✅ No API keys, OAuth tokens, or PII patterns matched."
+            else
+              echo ""
+              echo "❌ Sensitive info detected. See details:"
+              echo ""
+              echo '```'
+              cat /tmp/scan.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
