@@ -2,7 +2,7 @@ name: Parser Regression + Secret Scan
 
 # Runs on every PR and push to main.
 #
-# Two guards, both zero-cost and no API key needed:
+# Three guards, all zero-cost and no API key needed:
 #
 #   1. Parser fixture regression: replays 8 golden stream-json transcripts
 #      (claude-code / cursor / codex / codebuddy × 2 smoke cases) through
@@ -14,7 +14,11 @@ name: Parser Regression + Secret Scan
 #      PII patterns. Second line of defence after the local pre-commit hook
 #      (install with scripts/install-hooks.sh).
 #
-# Both are hard gates for PR merge.
+#   3. Phase 3 smoke: exercises the inject / hook / archive / judge pipeline
+#      against a synthetic transcript. No LLM call — just proves the wiring
+#      hasn't rotted between real --with-trace runs.
+#
+# All three are hard gates for PR merge.
 
 on:
   pull_request:
@@ -88,6 +92,117 @@ jobs:
               echo ""
               echo '```'
               cat /tmp/scan.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phase3-smoke:
+    name: Phase 3 wiring smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Phase 3 wiring smoke
+        id: p3
+        # Exercises phase3/ modules end-to-end without touching an LLM:
+        #   1. inject() into a fake working_dir → hook registered
+        #   2. simulate a PostToolUse envelope via stdin → tool_call event written
+        #   3. restore() → settings.json rolled back
+        #   4. _match_trace_assertions() against the written trace → judge passes
+        # If any step regresses (schema drift, path rewire, tier map change),
+        # this catches it before Phase 3 is used in anger.
+        run: |
+          set +e
+          python3 - <<'PY' 2>&1 | tee /tmp/p3.log
+          import json, os, subprocess, sys, tempfile
+          from pathlib import Path
+
+          repo = Path.cwd()
+          sys.path.insert(0, str(repo))
+          sys.path.insert(0, str(repo / "phase3"))
+
+          from phase3.eval_runner import inject, restore, HOOK_MARKER_COMMAND
+          from run_eval import _match_trace_assertions
+
+          # 1. Inject/restore over a fake working_dir with a pre-existing user hook.
+          with tempfile.TemporaryDirectory() as td:
+              wd = Path(td)
+              (wd / ".claude").mkdir()
+              (wd / ".claude/settings.json").write_text(
+                  json.dumps({"hooks": {"PreToolUse": [
+                      {"matcher": "Write", "hooks":
+                       [{"type": "command", "command": "/existing/hook.sh"}]}]}})
+              )
+
+              inject(wd)
+              after = json.loads((wd / ".claude/settings.json").read_text())
+              assert "PreToolUse" in after["hooks"], "user PreToolUse got dropped"
+              assert any(HOOK_MARKER_COMMAND in json.dumps(h) for h in after["hooks"].get("PostToolUse", [])), \
+                     "our PostToolUse not injected"
+              print("[1/4] inject OK — user hooks preserved, ours added")
+
+              # 2. Simulate a PostToolUse envelope through the hook script.
+              cache = wd / "cache"
+              envelope = json.dumps({
+                  "session_id": "harness-conv-id",
+                  "tool_name": "Read",
+                  "cwd": str(wd),
+                  "duration_ms": 12,
+                  "tool_use_id": "tu_smoke",
+                  "tool_input": {"file_path": "/x/skills/trtc-docs/SKILL.md"},
+                  "tool_response": {"file": {"numLines": 100, "totalLines": 200, "content": "SECRET"}}
+              })
+              r = subprocess.run(
+                  ["python3", str(repo / "phase3/trace_posttooluse.py")],
+                  input=envelope, capture_output=True, text=True,
+                  env={**os.environ, "XDG_CACHE_HOME": str(cache)},
+              )
+              assert r.returncode == 0, f"hook exited {r.returncode}: {r.stderr}"
+              trace_file = cache / "trtc-traces/harness-conv-id.jsonl"
+              assert trace_file.exists(), "trace file not written"
+              ev = json.loads(trace_file.read_text().splitlines()[0])
+              assert ev["event"] == "tool_call" and ev["tool_name"] == "Read"
+              assert "SECRET" not in trace_file.read_text(), "PRIVACY LEAK: file content in trace"
+              print("[2/4] hook OK — tool_call event written, no privacy leak")
+
+              # 3. Restore rolls back to the exact user hook set.
+              restore(wd)
+              after = json.loads((wd / ".claude/settings.json").read_text())
+              assert "PostToolUse" not in after.get("hooks", {}), "our hook not removed"
+              assert after["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "/existing/hook.sh"
+              print("[3/4] restore OK — user hooks intact, ours gone")
+
+              # 4. Judge evaluates the trace we just wrote.
+              os.environ["XDG_CACHE_HOME"] = str(cache)
+              ok, reason = _match_trace_assertions(
+                  [{"event": "tool_call", "where": {"tool_name": "Read"}, "min_count": 1},
+                   {"event": "hook_decision", "where": {"decision": "fail_open"}, "must_not": True}],
+                  wd,
+              )
+              assert ok, f"judge unexpectedly failed: {reason}"
+              print(f"[4/4] judge OK — {reason}")
+
+          print("✅ Phase 3 wiring smoke: all 4 stages pass")
+          PY
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit $rc
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Phase 3 Wiring Smoke"
+            if [ "${{ steps.p3.outputs.rc }}" = "0" ]; then
+              echo ""
+              echo "✅ inject / hook / restore / judge — all 4 stages pass."
+            else
+              echo ""
+              echo "❌ Phase 3 smoke FAILED. Full log:"
+              echo ""
+              echo '```'
+              cat /tmp/p3.log
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"

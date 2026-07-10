@@ -62,7 +62,6 @@
 ## 详细文档
 
 - **[`SOP.md`](./SOP.md)** — 操作 SOP，六节场景化 checklist（推荐入口）
-- **[`trtc-eval-flow.html`](./trtc-eval-flow.html)** — 方案背景、关键决策、演进路径（PM 视角）
 
 ---
 
