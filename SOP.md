@@ -424,8 +424,9 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml
 |---|---|
 | `cases.json` | case 单一数据源；改了不用动脚本 |
 | `check_install.py` | P1 |
-| `run_eval.py` | P2 全自动跑 + parser + 判定器 |
+| `run_eval.py` | P2 全自动跑 + parser + 判定器（含 `--with-trace` 入口） |
 | `score.py` | 打分 + baseline diff |
+| `phase3/` | Phase 3 白盒 trace（tracer + PostToolUse hook + eval_runner），eval-only |
 | `fixtures/transcripts/<ide>/` | parser regression 的 golden 样本 |
 | `tests/test_parser_regression.py` | 8 fixture 回归 |
 | `scripts/scan_sensitive.py` | 敏感串扫描 |

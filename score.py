@@ -44,6 +44,7 @@ OBS_TIER = {
     "reporting_called":      "major",
     "hooks_guarded":         "major",
     "session_state":         "major",
+    "trace_assertions":      "major",  # Phase 3 白盒断言 — 内部契约 fail 应当 flip case
     "route_level1":          "minor",
     "route_level2":          "minor",
     "clarification_raised":  "minor",
