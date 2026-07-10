@@ -188,3 +188,12 @@ jobs:
         with:
           header: p1-install-check
           path: /tmp/p1-report.md
+
+      - name: All green — no comment posted
+        if: steps.build.outputs.post != 'true'
+        # Explicit no-op so the job doesn't end with a skipped step, which the
+        # GitHub UI renders with a "skipped" icon at job level even when the
+        # summary was written and posted to $GITHUB_STEP_SUMMARY successfully.
+        run: |
+          echo "✅ All IDEs passed P1 install check — no PR comment needed."
+          echo "See the P1 install check summary at the top of this run's page."
