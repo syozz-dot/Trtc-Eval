@@ -932,10 +932,20 @@ def dump_results_yaml(data: dict) -> str:
                 lines.append(f"      observations:")
                 for k, v in t["observations"].items():
                     lines.append(f"        {k}: {_yaml_scalar(v)}")
+                reasons = t.get("observation_reasons") or {}
+                if reasons:
+                    lines.append(f"      observation_reasons:")
+                    for k, v in reasons.items():
+                        lines.append(f"        {k}: {_yaml_scalar(v)}")
         if "observations" in case:
             lines.append(f"    observations:")
             for k, v in case["observations"].items():
                 lines.append(f"      {k}: {_yaml_scalar(v)}")
+            reasons = case.get("observation_reasons") or {}
+            if reasons:
+                lines.append(f"    observation_reasons:")
+                for k, v in reasons.items():
+                    lines.append(f"      {k}: {_yaml_scalar(v)}")
         if "case_level" in case:
             lines.append(f"    case_level:")
             for k, v in case["case_level"].items():
@@ -1097,25 +1107,34 @@ def run_case(
 
         # 逐个观察点判定
         turn_obs = {}
+        turn_reasons = {}   # obs_key → judge's reason string (for report drill-down)
         for obs_key in expect:
             if obs_key not in obs_dict:
                 continue
             # 能力过滤：obs_key 需要的能力 IDE 没有 → 直接 skip
             required = obs_dict[obs_key].get("requires", [])
-            if any(c not in ide_caps for c in required):
+            missing_cap = [c for c in required if c not in ide_caps]
+            if missing_cap:
                 turn_obs[obs_key] = "S"
+                turn_reasons[obs_key] = f"IDE lacks capability: {', '.join(missing_cap)}"
                 continue
             verdict, reason = evaluate_observation(obs_key, expect[obs_key], transcript, working_dir)
             turn_obs[obs_key] = verdict
+            turn_reasons[obs_key] = reason
             icon = {"Y": "✓", "N": "✗", "S": "─"}.get(verdict, "?")
             print(f"      {icon} {obs_key}: {verdict}  ({reason[:80]})", flush=True)
             all_reasons.append(f"turn{t_idx}.{obs_key}={verdict}: {reason}")
 
-        turn_results.append({"turn": t_idx, "observations": turn_obs})
+        turn_results.append({
+            "turn": t_idx,
+            "observations": turn_obs,
+            "observation_reasons": turn_reasons,
+        })
 
     # 组装 entry
     if len(turns) == 1:
         entry["observations"] = turn_results[0]["observations"]
+        entry["observation_reasons"] = turn_results[0]["observation_reasons"]
     else:
         entry["turns"] = turn_results
 

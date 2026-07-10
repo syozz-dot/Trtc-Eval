@@ -80,6 +80,7 @@ class DimResult:
     value: str
     status: str      # "pass" / "fail" / "skip_user" / "skip_capability" / "unfilled"
     skip_reason: str = ""
+    reason: str = ""    # judge 给的详细原因（可选，来自 observation_reasons）
 
     @property
     def tier(self) -> str:
@@ -191,9 +192,10 @@ def score_case(
             return result
 
     # 收集观察点：单轮扁平 or 多轮 turns
-    def _collect_obs(observations: dict, turn_id: int | None) -> None:
+    def _collect_obs(observations: dict, reasons: dict, turn_id: int | None) -> None:
         for k, v in observations.items():
             status, norm = _classify_value(v)
+            reason = reasons.get(k, "") if isinstance(reasons, dict) else ""
 
             # 若维度需要 IDE 不具备的能力，覆盖为 skip_capability
             missing = _lacks_capability(_obs_key_requires(obs_dict, k), ide_capabilities)
@@ -202,18 +204,28 @@ def score_case(
                     turn=turn_id, key=k, value=norm,
                     status="skip_capability",
                     skip_reason=f"lacks {', '.join(missing)}",
+                    reason=reason,
                 ))
                 continue
 
             result.dims.append(DimResult(
-                turn=turn_id, key=k, value=norm, status=status
+                turn=turn_id, key=k, value=norm, status=status,
+                reason=reason,
             ))
 
     if "turns" in entry:
         for t in entry["turns"]:
-            _collect_obs(t.get("observations", {}), t.get("turn"))
+            _collect_obs(
+                t.get("observations", {}),
+                t.get("observation_reasons", {}),
+                t.get("turn"),
+            )
     elif "observations" in entry:
-        _collect_obs(entry["observations"], None)
+        _collect_obs(
+            entry["observations"],
+            entry.get("observation_reasons", {}),
+            None,
+        )
 
     # case_level 期望
     case_level = entry.get("case_level", {}) or {}
@@ -435,7 +447,30 @@ def print_report(results: list[CaseResult], meta: dict, baseline: dict | None) -
         print(f"\n  FAIL 明细：")
         for r in failed:
             marker = "★ " if r.critical_failed else "  "
-            print(f"    {marker}{r.case_id}: {r.fail_reason}")
+            print(f"    {marker}{r.case_id}:")
+            for d in r.failed_dims:
+                if d.key.replace("case:", "") in SOFT_OBS:
+                    continue
+                key = d.key.replace("case:", "")
+                turn_marker = f" @turn{d.turn}" if d.turn is not None else ""
+                reason = d.reason or "(no reason recorded)"
+                print(f"       ✗ {key}{turn_marker} — {reason}")
+
+    # SKIP 明细 —— 让"未启用/能力不足"透明可见
+    skipped_dims = [
+        (r, d) for r in results for d in r.dims
+        if d.status in ("skip_user", "skip_capability")
+    ]
+    if skipped_dims:
+        print(f"\n  跳过明细（不影响 pass/fail）：")
+        for r, d in skipped_dims:
+            key = d.key.replace("case:", "")
+            turn_marker = f" @turn{d.turn}" if d.turn is not None else ""
+            if d.status == "skip_capability":
+                reason = f"IDE 能力不支持（{d.skip_reason}）"
+            else:
+                reason = d.reason or "运行时跳过"
+            print(f"      ─ {r.case_id} · {key}{turn_marker} — {reason}")
 
     # Minor concern 汇总（pass 但 route_level* 观察点 N 的 case）—— 记录不告警
     concerns = [r for r in results if r.status == "pass" and r.soft_failed]
@@ -561,17 +596,53 @@ def format_report_markdown(results: list[CaseResult], meta: dict, baseline: dict
         lines.append("")
         for r in failed:
             marker = "**★ CRITICAL**" if r.critical_failed else "**FAIL**"
-            lines.append(f"- {marker} `{r.case_id}`: {r.fail_reason}")
+            lines.append(f"- {marker} `{r.case_id}`")
+            # Show each failed observation with its judge's reason (drill-down)
+            for d in r.failed_dims:
+                if d.key.replace("case:", "") in SOFT_OBS:
+                    continue  # soft failures are minor concerns, shown separately
+                key = d.key.replace("case:", "")
+                label = _obs_label(key)
+                turn_marker = f" @turn{d.turn}" if d.turn is not None else ""
+                reason = d.reason or "(no reason recorded)"
+                lines.append(f"  - ✗ `{label}`{turn_marker} — {reason}")
+        lines.append("")
+
+    # ── Skipped observations (call out P3 未启用 / IDE 能力不支持) ────────────
+    # Only surface skips that came from a live obs judgement (skip_user or
+    # skip_capability). unfilled skips (user never scored) are already caught
+    # by the incomplete status; not worth surfacing again.
+    skipped_dims: list[tuple[CaseResult, DimResult]] = []
+    for r in results:
+        for d in r.dims:
+            if d.status in ("skip_user", "skip_capability"):
+                skipped_dims.append((r, d))
+    if skipped_dims:
+        lines.append("### ─ 跳过明细（不影响 pass/fail）")
+        lines.append("")
+        for r, d in skipped_dims:
+            key = d.key.replace("case:", "")
+            label = _obs_label(key)
+            turn_marker = f" @turn{d.turn}" if d.turn is not None else ""
+            if d.status == "skip_capability":
+                reason = f"IDE 能力不支持（{d.skip_reason}）"
+            else:
+                # skip_user — reason comes from judge (e.g. Phase 3 not activated)
+                reason = d.reason or "运行时跳过"
+            lines.append(f"- `{r.case_id}` · `{label}`{turn_marker} — {reason}")
         lines.append("")
 
     # ── Minor concern (only if any) ─────────────────────────────────────────
     concerns = [r for r in results if r.status == "pass" and r.soft_failed]
     if concerns:
-        lines.append("### 待关注（不影响 pass）")
+        lines.append("### 待关注（不影响 pass · soft 观察点 N）")
         lines.append("")
         for r in concerns:
-            keys = ", ".join(f"`{_dim_ref(d)}`" for d in r.soft_failed)
-            lines.append(f"- `{r.case_id}`: {keys}")
+            for d in r.soft_failed:
+                key = d.key.replace("case:", "")
+                turn_marker = f" @turn{d.turn}" if d.turn is not None else ""
+                reason = d.reason or "(no reason recorded)"
+                lines.append(f"- `{r.case_id}` · `{key}`{turn_marker} — {reason}")
         lines.append("")
 
     # ── Baseline overall delta ──────────────────────────────────────────────
