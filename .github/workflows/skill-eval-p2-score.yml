@@ -1,4 +1,4 @@
-name: P2 Score Report (offline)
+name: Skill Eval Score Report (offline)
 
 # Runs when a PR modifies eval-runs/**/results.*.yaml — that is, when a developer
 # committed the output of a LOCAL run_eval.py run to share results with the team.
@@ -61,7 +61,9 @@ jobs:
           mkdir -p /tmp/score-report
           REPORT=/tmp/score-report/comment.md
           {
-            echo "# P2 Eval Score Report"
+            echo "# Skill Eval Score Report"
+            echo ""
+            echo "_P2 外部行为观察 + P3 内部 trace 断言（如启用）合并展示。_"
             echo ""
             echo "Committed by \`$GITHUB_HEAD_REF\`, scored by CI. No API keys used."
             echo ""

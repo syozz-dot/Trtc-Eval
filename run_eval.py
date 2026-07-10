@@ -590,8 +590,13 @@ def _load_trace_events(working_dir: Path) -> list[dict]:
     return events
 
 
-def _match_trace_assertions(detail, working_dir: Path) -> tuple[bool, str]:
+def _match_trace_assertions(detail, working_dir: Path) -> tuple[str, str]:
     """[Phase 3] Verify white-box trace events.
+
+    Returns a 3-state verdict:
+      - ("Y", reason) — assertions satisfied
+      - ("N", reason) — trace exists but assertions failed
+      - ("S", reason) — no trace data collected (Phase 3 not activated for this run)
 
     `detail` is a list of assertion dicts (or a single dict). Each dict:
 
@@ -611,7 +616,10 @@ def _match_trace_assertions(detail, working_dir: Path) -> tuple[bool, str]:
 
     events = _load_trace_events(working_dir)
     if not events:
-        return False, "no trace events found — did you pass --with-trace?"
+        # Phase 3 wasn't activated (--with-trace not passed) or no trace was
+        # produced during this run. Skip rather than fail — a case is not
+        # broken just because the operator chose to run P2-only.
+        return "S", "trace not activated (use --with-trace to enable Phase 3)"
 
     def _matches(ev: dict, where: dict) -> bool:
         for k, v in (where or {}).items():
@@ -653,8 +661,8 @@ def _match_trace_assertions(detail, working_dir: Path) -> tuple[bool, str]:
             failures.append(f"[{event_type}] want ≤{max_c}, got {n} where={where}")
 
     if failures:
-        return False, " | ".join(failures)
-    return True, f"all {len(detail)} trace assertion(s) satisfied"
+        return "N", " | ".join(failures)
+    return "Y", f"all {len(detail)} trace assertion(s) satisfied"
 
 
 # ── 判定分派 ────────────────────────────────────────────────────────────────
@@ -724,8 +732,8 @@ def evaluate_observation(
             return ("Y" if ok else "N", reason)
 
         if obs_key == "trace_assertions":
-            ok, reason = _match_trace_assertions(detail, working_dir)
-            return ("Y" if ok else "N", reason)
+            # Returns 3-state verdict directly (Y/N/S), no bool→str translation.
+            return _match_trace_assertions(detail, working_dir)
 
         return ("S", f"no matcher for obs_key={obs_key}")
 

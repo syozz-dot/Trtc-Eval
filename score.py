@@ -500,20 +500,30 @@ def format_report_markdown(results: list[CaseResult], meta: dict, baseline: dict
 
     baseline_cases = {c["case_id"]: c for c in (baseline or {}).get("cases", [])}
 
+    # Which observation keys are Phase 3 signals — get a [P3] prefix in the
+    # markdown observation column so P2 vs P3 is visually distinct.
+    PHASE3_OBS = {"trace_assertions"}
+
+    def _obs_label(key: str) -> str:
+        return f"[P3] {key}" if key in PHASE3_OBS else key
+
     def _obs_summary(r: CaseResult) -> str:
         """Compact one-cell observation summary, tier icons preserved."""
         parts: list[str] = []
         for d in r.dims:
             key = d.key.replace("case:", "")
+            label = _obs_label(key)
             if d.status == "pass":
-                parts.append(f"✓ {key}")
+                parts.append(f"✓ {label}")
             elif d.status == "fail":
                 mark = "★" if d.tier == "critical" else ("·" if d.tier == "minor" else "")
-                parts.append(f"✗ {mark}{key}".strip())
+                parts.append(f"✗ {mark}{label}".strip())
             elif d.status == "skip_capability":
-                parts.append(f"─ {key} (跳过)")
+                parts.append(f"─ {label} (跳过)")
+            elif d.status == "skip_user":
+                parts.append(f"─ {label} (未启用)")
             elif d.status == "unfilled":
-                parts.append(f"? {key}")
+                parts.append(f"? {label}")
         return " · ".join(parts) if parts else "—"
 
     for r in results:

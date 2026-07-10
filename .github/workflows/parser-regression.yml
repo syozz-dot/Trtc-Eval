@@ -176,12 +176,12 @@ jobs:
 
               # 4. Judge evaluates the trace we just wrote.
               os.environ["XDG_CACHE_HOME"] = str(cache)
-              ok, reason = _match_trace_assertions(
+              verdict, reason = _match_trace_assertions(
                   [{"event": "tool_call", "where": {"tool_name": "Read"}, "min_count": 1},
                    {"event": "hook_decision", "where": {"decision": "fail_open"}, "must_not": True}],
                   wd,
               )
-              assert ok, f"judge unexpectedly failed: {reason}"
+              assert verdict == "Y", f"judge unexpectedly returned {verdict}: {reason}"
               print(f"[4/4] judge OK — {reason}")
 
           print("✅ Phase 3 wiring smoke: all 4 stages pass")
