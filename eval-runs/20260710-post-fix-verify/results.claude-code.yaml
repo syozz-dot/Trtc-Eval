@@ -1,0 +1,25 @@
+version: 2.0
+ide: claude-code
+tester: run_eval.py
+date: 2026-07-10
+cases:
+  - case_id: P2-DOCS-ERRCODE
+    observations:
+      route_level1: "Y"
+      reporting_called: "Y"
+      tools_called: "N"
+      trace_assertions: "S"
+    observation_reasons:
+      route_level1: "routed to trtc-docs (evidence: ['trtc-docs'])"
+      reporting_called: all 1 script(s) called
+      tools_called: "missing required tool: query_classifier"
+      trace_assertions: trace not activated (use --with-trace to enable Phase 3)
+    notes: auto by run_eval.py; 1 turn(s)
+  - case_id: P2-DOCS-FAQ
+    observations:
+      route_level1: "Y"
+      reporting_called: "Y"
+    observation_reasons:
+      route_level1: "routed to trtc-docs (evidence: ['trtc', 'trtc-docs'])"
+      reporting_called: all 1 script(s) called
+    notes: auto by run_eval.py; 1 turn(s)

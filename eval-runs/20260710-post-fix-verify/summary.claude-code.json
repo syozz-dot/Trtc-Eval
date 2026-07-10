@@ -1,0 +1,86 @@
+{
+  "phase": "p2",
+  "version": "2.0",
+  "ide": "claude-code",
+  "ide_capabilities": [
+    "headless",
+    "hooks",
+    "session_file",
+    "tool_use_events",
+    "trace"
+  ],
+  "tester": "run_eval.py",
+  "date": "2026-07-10",
+  "total": 2,
+  "passed": 1,
+  "failed": 1,
+  "incomplete": 0,
+  "skipped_capability": 0,
+  "avg_score": 0.875,
+  "cases": [
+    {
+      "case_id": "P2-DOCS-ERRCODE",
+      "status": "fail",
+      "score": 0.75,
+      "skip_reason": "",
+      "fail_reason": "tools_called",
+      "critical_failed": [],
+      "structure": "single",
+      "dims": [
+        {
+          "turn": null,
+          "key": "route_level1",
+          "tier": "minor",
+          "status": "pass",
+          "value": "Y"
+        },
+        {
+          "turn": null,
+          "key": "reporting_called",
+          "tier": "major",
+          "status": "pass",
+          "value": "Y"
+        },
+        {
+          "turn": null,
+          "key": "tools_called",
+          "tier": "minor",
+          "status": "fail",
+          "value": "N"
+        },
+        {
+          "turn": null,
+          "key": "trace_assertions",
+          "tier": "major",
+          "status": "skip_user",
+          "value": "S"
+        }
+      ]
+    },
+    {
+      "case_id": "P2-DOCS-FAQ",
+      "status": "pass",
+      "score": 1.0,
+      "skip_reason": "",
+      "fail_reason": "",
+      "critical_failed": [],
+      "structure": "single",
+      "dims": [
+        {
+          "turn": null,
+          "key": "route_level1",
+          "tier": "minor",
+          "status": "pass",
+          "value": "Y"
+        },
+        {
+          "turn": null,
+          "key": "reporting_called",
+          "tier": "major",
+          "status": "pass",
+          "value": "Y"
+        }
+      ]
+    }
+  ]
+}
