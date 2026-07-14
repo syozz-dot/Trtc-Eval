@@ -1,70 +1,83 @@
-# TRTC Skill · Corpus 评测覆盖报告
+**IDE**: `claude-code`  ·  **日期**: 2026-07-14  ·  **out-dir**: `corpus-smoke-2026-07-14`  ·  **范围**: 2/8 条 corpus seed
 
-**IDE**: claude-code  ·  **日期**: 2026-07-14  ·  **out-dir**: `corpus-smoke-2026-07-14`
+## 📋 TL;DR
 
-**范围**: 2 / 8 条 corpus seed 已跑 · 触发正确性覆盖 2 · bucket 覆盖 2
+- ✅ **触发正确性**: 2/2 通过（skill 都按预期触发）
 
-本报告聚合两个 orthogonal 信号：
-1. **触发正确性**（skill/工具按预期触发）— 通过 8 维度 Y/N 判定
-2. **能力覆盖**（回答有没有实质内容 + 数据源）— 通过 bucket A/B/C/D/E? 判定
+### ⚠️ 发现 1 个能力暗雷
+_触发都对了，但 AI 的回答有覆盖缺口_：
 
-触发正确性 pass 但 bucket ∈ {B/C/D/E?} 是**核心缺口信号** —— 路由/工具都对，但能力有暗雷。
+- 🟡 **Live** · _TUIRoomEngine 点赞事件回调_  
+  → **只靠 docsbot** — 本地文档无覆盖，docsbot 挂就失守
+
+### 🟢 1 个覆盖完整
+
+- **Chat** · _Vue3 UIKit 消息列表头像配置_ （读了 4 份本地文档）
+
+### ⏱ 耗时/消耗对比
+
+_tool 数量 ≈ token 消耗；error 多说明可能有 fallback 循环_
+
+- **Chat**: 33 tools · 8 errors · 🐢 慢（多次 fallback）
+- **Live**: 9 tools · 1 errors · 🚀 快
 
 ---
 
-## 1. 触发正确性
+<details>
+<summary><b>📊 技术细节</b>（点开看：8 维度触发观察点 · bucket 判定 · 每条数据源）</summary>
 
-**Pass rate**: 2/2 = 100.0%
+### 触发正确性 — 每条 case
 
 | Case | Product | Intent | Pass | Fail / Concern |
-|---|---|---|---|---|
+|---|---|---|:---:|---|
 | P2-CORPUS-CHAT-001 | Chat | capability_lookup | ✅ | - |
 | P2-CORPUS-LIVE-001 | Live | api_lookup | ✅ | - |
 
-> `route_level1/2` 是 soft observation：N 只记 minor concern，不拖 case 到 fail。其他 hard 观察点任一 N 都会拖 fail。
+### 能力覆盖 — 每条数据源
 
----
-
-## 2. 能力覆盖 · Bucket 分布
-
-| Case | Product | Bucket | Path (数据源) | Tools | Errors | 说明 |
-|---|---|:---:|---|---:|---:|---|
-| P2-CORPUS-CHAT-001 | Chat | **A** | 4 slice + webfetch | 33 | 8 | answered from 4 local slice(s) |
-| P2-CORPUS-LIVE-001 | Live | **B** | docsbot | 9 | 1 | docsbot resolved but no local slice — local KB coverage gap |
+| Case | Product | 结论 | 数据源 | Tools | Errors |
+|---|---|---|---|---:|---:|
+| P2-CORPUS-CHAT-001 | Chat | 🟢 覆盖完整 | 4 份本地文档 + webfetch 兜底 | 33 | 8 |
+| P2-CORPUS-LIVE-001 | Live | 🟡 只靠 docsbot | docsbot | 9 | 1 |
 
 ### 按产品聚合
 
-| Product | Cases | A | B | C | D | E? | 结论 |
+| Product | Cases | 🟢 | 🟡 | 🟠 | 🔵 | 🚨 | 结论 |
 |---|---:|---:|---:|---:|---:|---:|---|
-| Chat | 1 | 1 | 0 | 0 | 0 | 0 | 本地 KB 完整覆盖 |
-| Live | 1 | 0 | 1 | 0 | 0 | 0 | ⚠️ 全部依赖 docsbot（本地 KB 缺） |
+| Chat | 1 | 1 | 0 | 0 | 0 | 0 | 🟢 本地覆盖完整 |
+| Live | 1 | 0 | 1 | 0 | 0 | 0 | 🟡 全部依赖 docsbot |
 
-### 高频缺口 top-N (B/C/D/E?)
+</details>
 
-- **P2-CORPUS-LIVE-001** [Live] bucket=**B**: docsbot resolved but no local slice — local KB coverage gap  
-  · path=`docsbot` · tools=9 · errors=1
+<details>
+<summary><b>📖 术语说明</b>（点开看：这条报告 vs Skill Eval Score Report 的区别 · bucket 定义 · 观察点分级）</summary>
+
+**PR 上会出现两条评论，各答一个问题**：
+
+| 评论 | 回答的问题 |
+|---|---|
+| **Skill Eval Score Report** | skill/工具**有没有按预期触发**？（涵盖所有 P2 case，不只 corpus）|
+| **Corpus Coverage Report**（本条）| AI 的**回答质量**如何？能力有没有覆盖用户提问？|
+
+**Bucket（能力覆盖分类）**：
+
+| Bucket | 含义 | 说明 |
+|---|---|---|
+| 🟢 `A` 覆盖完整 | | 本地文档命中，或 docsbot + 本地双命中 |
+| 🟡 `B` 只靠 docsbot | | 本地文档无覆盖，docsbot 挂就失守 |
+| 🟠 `C` 拒答 | | skill 明说不支持 / 找不到 |
+| 🔵 `D` 追问无路 | | 反复追问最终没答上 |
+| 🚨 `E?` 疑似瞎编 | | 有回答但没检索源，可能是幻觉 |
+
+**触发正确性观察点分级**（如果你看到 route_level1 fail 但整体 pass，就是这个原因）：
+- `route_triggered` = **critical** → 主 skill 未触发时整 case fail
+- `route_level1` / `route_level2` = **soft** → 路由准确度还没优化，N 只记 minor concern
+- 其他 hard 观察点 → 任一 N 都会拖 case fail
+
+</details>
 
 ---
-
-## 3. Token / Tool 消耗速览
-
-| Case | Product | Bucket | Tools | Errors | Slices | WebFetch | 备注 |
-|---|---|:---:|---:|---:|---:|:---:|---|
-| P2-CORPUS-CHAT-001 | Chat | A | 33 | 8 | 4 | ✓ | ⚠️ 高 error 计数 → 可能触发 fallback 循环 |
-| P2-CORPUS-LIVE-001 | Live | B | 9 | 1 | 0 | ✗ |  |
-
-> 关注 tools 数量、error 数量、slice 读取数——这三个指标与 token 消耗强相关。
-> Chat Path D 的高 token 消耗典型特征：多 slice + webfetch fallback + 多 tool_error。
-
----
-
-## 4. 结论与后续
-
-**判定信号总结**：
-- 触发正确性 pass rate: 2/2
-- Bucket 分布: A=1, B=1, C=0, D=0, E?=0
 
 **已知限制**：
-- 本次仅覆盖 2/8 条 corpus seed，样本量小
-- xlsx 全量 2078 条 corpus 待接入（Task #5 · dump_corpus.py）
-- Bucket E?（疑似幻觉）需 LLM judge 二次确认，本工具不做
+- 本次覆盖 2/8 条 corpus seed
+- 🚨 疑似瞎编 需 LLM judge 二次确认，本工具不做

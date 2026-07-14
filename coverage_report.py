@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-coverage_report.py — 生成 corpus 评测覆盖报告（pipeline 最后一环）
+coverage_report.py — 生成 corpus 评测覆盖报告（人话版）
 
 从 eval-runs out-dir 聚合三个 orthogonal 信号：
-  1. 触发正确性: 读 out-dir/results*.yaml（8 维度 Y/N，来自 run_eval.py）
-  2. 能力覆盖: 复用 bucket_classifier 分析 out-dir/transcripts/*.jsonl（A/B/C/D/E?）
-  3. 用例元数据: 从 cases.json 读 corpus_meta（product/intent）
+  1. 触发正确性: 读 out-dir/results*.yaml（8 维度 Y/N）
+  2. 能力覆盖: 复用 bucket_classifier 分析 transcripts/*.jsonl（bucket A/B/C/D/E?）
+  3. 用例元数据: 从 cases.json 读 corpus_meta（product/intent/description）
 
-输出 out-dir/report.md 并在 stdout 打摘要。
-只报告 tag=corpus 的 case；其他 P1/P2 手写 case 不进此报告。
+呈现原则：顶部 TL;DR 给人看，技术细节 <details> 折叠给 AI 看。
 
 Usage:
     python3 coverage_report.py --out-dir ./eval-runs/corpus-smoke-2026-07-14
-    python3 coverage_report.py --out-dir ./eval-runs/xxx --cases ./cases.json --ide claude-code
 """
 from __future__ import annotations
 
@@ -35,6 +33,16 @@ HARD_OBS = {
 }
 SOFT_OBS = {"route_level1", "route_level2"}
 
+# bucket → (emoji, 短标签, 一句话解释)
+BUCKET_META = {
+    "A":  ("🟢", "覆盖完整",       "本地文档命中，或 docsbot + 本地双命中"),
+    "B":  ("🟡", "只靠 docsbot",   "本地文档无覆盖，docsbot 挂就失守"),
+    "C":  ("🟠", "拒答",           "skill 明说不支持 / 找不到"),
+    "D":  ("🔵", "追问无路",       "反复追问最终没答上"),
+    "E?": ("🚨", "疑似瞎编",       "有回答但没检索源，可能是幻觉"),
+    "?":  ("❓", "未分类",         ""),
+}
+
 
 # ── data loaders ───────────────────────────────────────────────────────────
 
@@ -44,7 +52,6 @@ def _load_yaml(path: Path) -> dict:
 
 
 def _load_corpus_meta(cases_path: Path) -> dict[str, dict]:
-    """从 cases.json 载入 case_id → {corpus_meta + description} 映射（只含 tag=corpus）"""
     with open(cases_path, encoding="utf-8") as f:
         data = json.load(f)
     m = {}
@@ -60,7 +67,6 @@ def _load_corpus_meta(cases_path: Path) -> dict[str, dict]:
 
 
 def _merge_results(out_dir: Path, ide: str) -> dict[str, dict]:
-    """glob 所有 results*<ide>.yaml 合并 case_id → observations"""
     merged: dict[str, dict] = {}
     for yf in sorted(out_dir.glob(f"results*{ide}.yaml")):
         data = _load_yaml(yf)
@@ -72,67 +78,75 @@ def _merge_results(out_dir: Path, ide: str) -> dict[str, dict]:
 
 
 def _extract_case_id(transcript_name: str) -> str:
-    """P2-CORPUS-CHAT-001.turn1.jsonl → P2-CORPUS-CHAT-001"""
     m = re.match(r"^(.+?)\.turn\d+\.jsonl$", transcript_name)
     return m.group(1) if m else transcript_name.replace(".jsonl", "")
 
 
-# ── correctness classification ─────────────────────────────────────────────
+# ── correctness ─────────────────────────────────────────────────────────────
 
 def _correctness(obs: dict) -> tuple[bool, list[str], list[str]]:
-    """返回 (hard_pass, hard_fail_dims, soft_fail_dims)"""
+    """(pass, hard_fail_dims, soft_fail_dims)"""
     hard_fails, soft_fails = [], []
     for k, v in obs.items():
-        val = str(v).upper()
-        if val != "N":
+        if str(v).upper() != "N":
             continue
-        if k in SOFT_OBS:
-            soft_fails.append(k)
-        else:  # HARD_OBS 或未识别的都当 hard
-            hard_fails.append(k)
+        (soft_fails if k in SOFT_OBS else hard_fails).append(k)
     return (not hard_fails, hard_fails, soft_fails)
 
 
-# ── rendering ───────────────────────────────────────────────────────────────
+# ── text helpers ────────────────────────────────────────────────────────────
 
-def _docsbot_mark(sig) -> str:
-    if not sig.docsbot_called:
-        return "-"
-    if sig.docsbot_could_answer is True:
-        return "✅"
-    if sig.docsbot_could_answer is False:
-        return "❌"
-    return "?"
+def _topic(cid: str, meta: dict) -> str:
+    """从 description 提取主题，去掉 'Corpus · Xxx FAQ ·' 前缀。
+    'Corpus · Chat FAQ · Vue3 UIKit 消息列表头像配置' → 'Vue3 UIKit 消息列表头像配置'
+    """
+    desc = str(meta.get("description", "")).strip()
+    if not desc:
+        return cid
+    parts = [p.strip() for p in desc.split("·")]
+    return parts[-1] if len(parts) > 1 else desc
 
 
-def _path_desc(v: BucketVerdict) -> str:
-    s = v.signals
+def _path_desc(sig) -> str:
+    """人话数据源描述"""
     parts = []
-    if s.docsbot_could_answer is True:
+    if sig.docsbot_could_answer is True:
         parts.append("docsbot")
-    if s.local_slice_read:
-        parts.append(f"{len(s.local_slice_read)} slice")
-    if s.webfetch_used:
-        parts.append("webfetch")
-    return " + ".join(parts) if parts else "(no source)"
+    if sig.local_slice_read:
+        parts.append(f"{len(sig.local_slice_read)} 份本地文档")
+    if sig.webfetch_used:
+        parts.append("webfetch 兜底")
+    return " + ".join(parts) if parts else "(无检索源)"
 
 
-def _product_conclusion(cnt: dict[str, int], total: int) -> str:
+def _speed_hint(sig) -> str:
+    """直观耗时/消耗描述"""
+    if sig.n_tool_calls >= 20 and sig.n_error_tool_results >= 3:
+        return "🐢 慢（多次 fallback）"
+    if sig.n_tool_calls <= 10:
+        return "🚀 快"
+    return "⚖️ 中等"
+
+
+def _product_conclusion(cnt: dict[str, int]) -> str:
+    total = sum(cnt.values())
     a, b, c, d, e = (cnt.get(x, 0) for x in ("A", "B", "C", "D", "E?"))
     if a == total:
-        return "本地 KB 完整覆盖"
+        return "🟢 本地覆盖完整"
     if b >= 1 and a == 0:
-        return "⚠️ 全部依赖 docsbot（本地 KB 缺）"
+        return "🟡 全部依赖 docsbot"
     if b >= 1:
-        return "⚠️ 部分本地 KB 缺口"
+        return "🟡 部分缺口"
     if c >= 1:
-        return "❌ 显式拒答（有覆盖盲区）"
+        return "🟠 有拒答"
     if d >= 1:
-        return "⚠️ 追问后无路"
+        return "🔵 追问无路"
     if e >= 1:
-        return "🚨 疑似幻觉，需 LLM judge"
+        return "🚨 疑似幻觉"
     return "-"
 
+
+# ── main rendering ─────────────────────────────────────────────────────────
 
 def render_report(
     corpus_meta: dict[str, dict],
@@ -145,37 +159,88 @@ def render_report(
     n = len(case_ids)
     n_measured = sum(1 for cid in case_ids if cid in results)
     n_pass = sum(1 for cid in case_ids if cid in results and _correctness(results[cid])[0])
-    n_bucketed = sum(1 for cid in case_ids if cid in verdicts)
     total_corpus = len(corpus_meta)
 
+    gaps = [(cid, corpus_meta[cid], verdicts[cid])
+            for cid in case_ids
+            if cid in verdicts and verdicts[cid].bucket in ("B", "C", "D", "E?")]
+    good = [(cid, corpus_meta[cid], verdicts[cid])
+            for cid in case_ids
+            if cid in verdicts and verdicts[cid].bucket == "A"]
+
     L: list[str] = []
+
+    # ─── Header ────────────────────────────────────────────────
     L += [
-        "# TRTC Skill · Corpus 评测覆盖报告",
+        f"**IDE**: `{ide}`  ·  **日期**: {date.today().isoformat()}  ·  **out-dir**: `{out_dir.name}`  ·  **范围**: {n}/{total_corpus} 条 corpus seed",
         "",
-        f"**IDE**: {ide}  ·  **日期**: {date.today().isoformat()}  ·  **out-dir**: `{out_dir.name}`",
+    ]
+
+    # ─── TL;DR ─────────────────────────────────────────────────
+    L += ["## 📋 TL;DR", ""]
+
+    if n_measured:
+        line = f"- ✅ **触发正确性**: {n_pass}/{n_measured} 通过"
+        if n_pass == n_measured:
+            line += "（skill 都按预期触发）"
+        else:
+            line += f"（{n_measured - n_pass} 条有触发问题，见 Skill Eval Score Report 评论详情）"
+        L.append(line)
+
+    if gaps:
+        L.append("")
+        L.append(f"### ⚠️ 发现 {len(gaps)} 个能力暗雷")
+        L.append("_触发都对了，但 AI 的回答有覆盖缺口_：")
+        L.append("")
+        for cid, meta, v in gaps:
+            emoji, label, why = BUCKET_META.get(v.bucket, BUCKET_META["?"])
+            L.append(
+                f"- {emoji} **{meta.get('product', '?')}** · _{_topic(cid, meta)}_  \n"
+                f"  → **{label}** — {why}"
+            )
+
+    if good:
+        L.append("")
+        L.append(f"### 🟢 {len(good)} 个覆盖完整")
+        L.append("")
+        for cid, meta, v in good:
+            s = v.signals
+            note = ""
+            if s.local_slice_read:
+                note = f"（读了 {len(s.local_slice_read)} 份本地文档）"
+            L.append(f"- **{meta.get('product', '?')}** · _{_topic(cid, meta)}_ {note}")
+
+    # 耗时/消耗对比 - 仅在多条 case 时展示
+    if len([cid for cid in case_ids if cid in verdicts]) >= 2:
+        L += ["", "### ⏱ 耗时/消耗对比", "",
+              "_tool 数量 ≈ token 消耗；error 多说明可能有 fallback 循环_", ""]
+        for cid in case_ids:
+            v = verdicts.get(cid)
+            if not v:
+                continue
+            s = v.signals
+            prod = corpus_meta[cid].get("product", "?")
+            L.append(
+                f"- **{prod}**: {s.n_tool_calls} tools · {s.n_error_tool_results} errors · {_speed_hint(s)}"
+            )
+
+    L += ["", "---", ""]
+
+    # ─── 技术细节 (folded) ─────────────────────────────────────
+    L += [
+        "<details>",
+        "<summary><b>📊 技术细节</b>（点开看：8 维度触发观察点 · bucket 判定 · 每条数据源）</summary>",
         "",
-        f"**范围**: {n} / {total_corpus} 条 corpus seed 已跑 · 触发正确性覆盖 {n_measured} · bucket 覆盖 {n_bucketed}",
-        "",
-        "本报告聚合两个 orthogonal 信号：",
-        "1. **触发正确性**（skill/工具按预期触发）— 通过 8 维度 Y/N 判定",
-        "2. **能力覆盖**（回答有没有实质内容 + 数据源）— 通过 bucket A/B/C/D/E? 判定",
-        "",
-        "触发正确性 pass 但 bucket ∈ {B/C/D/E?} 是**核心缺口信号** —— 路由/工具都对，但能力有暗雷。",
-        "",
-        "---",
-        "",
-        "## 1. 触发正确性",
-        "",
-        f"**Pass rate**: {n_pass}/{n_measured} = {100*n_pass/max(n_measured,1):.1f}%",
+        "### 触发正确性 — 每条 case",
         "",
         "| Case | Product | Intent | Pass | Fail / Concern |",
-        "|---|---|---|---|---|",
+        "|---|---|---|:---:|---|",
     ]
     for cid in case_ids:
         meta = corpus_meta[cid]
         obs = results.get(cid)
         if obs is None:
-            L.append(f"| {cid} | {meta.get('product','?')} | {meta.get('intent','?')} | — | (未跑) |")
+            L.append(f"| {cid} | {meta.get('product', '?')} | {meta.get('intent', '?')} | — | (未跑) |")
             continue
         ok, hard, soft = _correctness(obs)
         mark = "✅" if ok else "❌"
@@ -185,115 +250,91 @@ def render_report(
         if soft:
             issues.append("· " + " ".join(soft))
         L.append(
-            f"| {cid} | {meta.get('product','?')} | {meta.get('intent','?')} | {mark} | {' '.join(issues) or '-'} |"
+            f"| {cid} | {meta.get('product', '?')} | {meta.get('intent', '?')} | {mark} | {' '.join(issues) or '-'} |"
         )
 
     L += [
         "",
-        "> `route_level1/2` 是 soft observation：N 只记 minor concern，不拖 case 到 fail。其他 hard 观察点任一 N 都会拖 fail。",
+        "### 能力覆盖 — 每条数据源",
         "",
-        "---",
-        "",
-        "## 2. 能力覆盖 · Bucket 分布",
-        "",
-        "| Case | Product | Bucket | Path (数据源) | Tools | Errors | 说明 |",
-        "|---|---|:---:|---|---:|---:|---|",
+        "| Case | Product | 结论 | 数据源 | Tools | Errors |",
+        "|---|---|---|---|---:|---:|",
     ]
+    for cid in case_ids:
+        meta = corpus_meta[cid]
+        v = verdicts.get(cid)
+        if v is None:
+            L.append(f"| {cid} | {meta.get('product', '?')} | — | — | — | — |")
+            continue
+        s = v.signals
+        emoji, label, _ = BUCKET_META.get(v.bucket, BUCKET_META["?"])
+        L.append(
+            f"| {cid} | {meta.get('product', '?')} | {emoji} {label} | {_path_desc(s)} | "
+            f"{s.n_tool_calls} | {s.n_error_tool_results} |"
+        )
+
+    # 按产品聚合
     by_product: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for cid in case_ids:
-        meta = corpus_meta[cid]
         v = verdicts.get(cid)
         if v is None:
-            L.append(f"| {cid} | {meta.get('product','?')} | — | — | — | — | (未跑) |")
             continue
-        s = v.signals
-        L.append(
-            f"| {cid} | {meta.get('product','?')} | **{v.bucket}** | "
-            f"{_path_desc(v)} | {s.n_tool_calls} | {s.n_error_tool_results} | {v.reason} |"
-        )
-        by_product[meta.get("product", "?")][v.bucket] += 1
+        by_product[corpus_meta[cid].get("product", "?")][v.bucket] += 1
 
-    L += [
-        "",
-        "### 按产品聚合",
-        "",
-        "| Product | Cases | A | B | C | D | E? | 结论 |",
-        "|---|---:|---:|---:|---:|---:|---:|---|",
-    ]
-    for prod in sorted(by_product):
-        cnt = by_product[prod]
-        total = sum(cnt.values())
-        vals = [cnt.get(k, 0) for k in ("A", "B", "C", "D", "E?")]
-        L.append(
-            f"| {prod} | {total} | " + " | ".join(str(x) for x in vals) +
-            f" | {_product_conclusion(cnt, total)} |"
-        )
-
-    # 缺口 top-N
-    gaps = [
-        (cid, corpus_meta[cid], verdicts[cid])
-        for cid in case_ids
-        if cid in verdicts and verdicts[cid].bucket in ("B", "C", "D", "E?")
-    ]
-    L += ["", "### 高频缺口 top-N (B/C/D/E?)", ""]
-    if not gaps:
-        L.append("_无缺口 case（全部 A - 完整命中）。_")
-    else:
-        for cid, meta, v in gaps:
-            s = v.signals
+    if by_product:
+        L += [
+            "",
+            "### 按产品聚合",
+            "",
+            "| Product | Cases | 🟢 | 🟡 | 🟠 | 🔵 | 🚨 | 结论 |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+        for prod in sorted(by_product):
+            cnt = by_product[prod]
+            total = sum(cnt.values())
+            vals = [cnt.get(k, 0) for k in ("A", "B", "C", "D", "E?")]
             L.append(
-                f"- **{cid}** [{meta.get('product','?')}] bucket=**{v.bucket}**: "
-                f"{v.reason}  \n"
-                f"  · path=`{_path_desc(v)}` · tools={s.n_tool_calls} · errors={s.n_error_tool_results}"
+                f"| {prod} | {total} | " + " | ".join(str(x) for x in vals) +
+                f" | {_product_conclusion(cnt)} |"
             )
 
-    # Token/tool 消耗视角
+    L += ["", "</details>", ""]
+
+    # ─── 术语说明 (folded) ─────────────────────────────────────
     L += [
+        "<details>",
+        "<summary><b>📖 术语说明</b>（点开看：这条报告 vs Skill Eval Score Report 的区别 · bucket 定义 · 观察点分级）</summary>",
         "",
-        "---",
+        "**PR 上会出现两条评论，各答一个问题**：",
         "",
-        "## 3. Token / Tool 消耗速览",
+        "| 评论 | 回答的问题 |",
+        "|---|---|",
+        "| **Skill Eval Score Report** | skill/工具**有没有按预期触发**？（涵盖所有 P2 case，不只 corpus）|",
+        "| **Corpus Coverage Report**（本条）| AI 的**回答质量**如何？能力有没有覆盖用户提问？|",
         "",
-        "| Case | Product | Bucket | Tools | Errors | Slices | WebFetch | 备注 |",
-        "|---|---|:---:|---:|---:|---:|:---:|---|",
+        "**Bucket（能力覆盖分类）**：",
+        "",
+        "| Bucket | 含义 | 说明 |",
+        "|---|---|---|",
     ]
-    for cid in case_ids:
-        meta = corpus_meta[cid]
-        v = verdicts.get(cid)
-        if v is None:
-            continue
-        s = v.signals
-        note = ""
-        if s.n_error_tool_results >= 5:
-            note = "⚠️ 高 error 计数 → 可能触发 fallback 循环"
-        elif s.webfetch_used and not s.docsbot_called:
-            note = "走 webfetch 兜底"
-        L.append(
-            f"| {cid} | {meta.get('product','?')} | {v.bucket} | {s.n_tool_calls} | "
-            f"{s.n_error_tool_results} | {len(s.local_slice_read)} | "
-            f"{'✓' if s.webfetch_used else '✗'} | {note} |"
-        )
+    for k in ("A", "B", "C", "D", "E?"):
+        emoji, label, desc = BUCKET_META[k]
+        L.append(f"| {emoji} `{k}` {label} | | {desc} |")
 
     L += [
         "",
-        "> 关注 tools 数量、error 数量、slice 读取数——这三个指标与 token 消耗强相关。",
-        "> Chat Path D 的高 token 消耗典型特征：多 slice + webfetch fallback + 多 tool_error。",
+        "**触发正确性观察点分级**（如果你看到 route_level1 fail 但整体 pass，就是这个原因）：",
+        "- `route_triggered` = **critical** → 主 skill 未触发时整 case fail",
+        "- `route_level1` / `route_level2` = **soft** → 路由准确度还没优化，N 只记 minor concern",
+        "- 其他 hard 观察点 → 任一 N 都会拖 case fail",
+        "",
+        "</details>",
         "",
         "---",
         "",
-        "## 4. 结论与后续",
-        "",
-        "**判定信号总结**：",
-        f"- 触发正确性 pass rate: {n_pass}/{n_measured}",
-        f"- Bucket 分布: " + ", ".join(
-            f"{b}={sum(v.get(b, 0) for v in by_product.values())}"
-            for b in ("A", "B", "C", "D", "E?")
-        ),
-        "",
         "**已知限制**：",
-        f"- 本次仅覆盖 {n}/{total_corpus} 条 corpus seed，样本量小",
-        "- xlsx 全量 2078 条 corpus 待接入（Task #5 · dump_corpus.py）",
-        "- Bucket E?（疑似幻觉）需 LLM judge 二次确认，本工具不做",
+        f"- 本次覆盖 {n}/{total_corpus} 条 corpus seed",
+        "- 🚨 疑似瞎编 需 LLM judge 二次确认，本工具不做",
         "",
     ]
 
@@ -304,7 +345,7 @@ def render_report(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Corpus 评测覆盖报告生成器")
-    ap.add_argument("--out-dir", required=True, help="eval-runs 输出目录")
+    ap.add_argument("--out-dir", required=True)
     ap.add_argument("--ide", default="claude-code")
     ap.add_argument("--cases", default=str(HERE / "cases.json"))
     args = ap.parse_args()
@@ -315,7 +356,7 @@ def main() -> int:
 
     corpus_meta = _load_corpus_meta(Path(args.cases))
     if not corpus_meta:
-        sys.exit(f"no corpus cases found in {args.cases} (tag=corpus)")
+        sys.exit(f"no corpus cases in {args.cases} (tag=corpus)")
 
     results = _merge_results(out_dir, args.ide)
 
@@ -333,7 +374,6 @@ def main() -> int:
     report_path = out_dir / "report.md"
     report_path.write_text(md, encoding="utf-8")
 
-    # stdout 摘要
     n_pass = sum(1 for cid, obs in results.items() if _correctness(obs)[0])
     buckets: dict[str, int] = defaultdict(int)
     for v in verdicts.values():
