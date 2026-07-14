@@ -776,6 +776,364 @@
           }
         }
       ]
+    },
+    {
+      "_section": "═══════════════════ Corpus seed（真实用户提示词 · 2026-07-14）═══════════════════"
+    },
+    {
+      "case_id": "P2-CORPUS-CHAT-001",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "chat",
+        "smoke"
+      ],
+      "description": "Corpus · Chat FAQ · Vue3 UIKit 消息列表头像配置",
+      "corpus_meta": {
+        "product": "Chat",
+        "intent": "capability_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "腾讯IM Vue3 Chat UIKit 是否支持在消息列表显示发送方头像？如何开启？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-chat",
+              "must_not": [
+                "trtc-docs",
+                "trtc-conference"
+              ]
+            },
+            "route_level2": {
+              "target": "Path D",
+              "reason": "Chat/IM 语境 + capability lookup 走 Path D"
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "must_not": [
+                "docsbot"
+              ],
+              "reason": "chat 内部设计不走 docsbot（国际站/国内站割裂）"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-CHAT-002",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "chat",
+        "smoke"
+      ],
+      "description": "Corpus · Chat FAQ · MessageList 默认头像行为",
+      "corpus_meta": {
+        "product": "Chat",
+        "intent": "capability_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "Vue3 Chat UIKit 的 MessageList 默认是否展示发送方头像？如果没显示，官方建议如何开启/处理？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-chat",
+              "must_not": [
+                "trtc-docs",
+                "trtc-conference"
+              ]
+            },
+            "route_level2": {
+              "target": "Path D",
+              "reason": "Chat/IM 语境 + capability lookup 走 Path D"
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "must_not": [
+                "docsbot"
+              ],
+              "reason": "chat 内部设计不走 docsbot"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-LIVE-001",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "live",
+        "smoke"
+      ],
+      "description": "Corpus · Live FAQ · TUIRoomEngine 点赞事件回调",
+      "corpus_meta": {
+        "product": "Live",
+        "intent": "api_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "TUIRoomEngine 是否有 onLikeReceived、onReceiveLike 或类似的事件来接收点赞消息？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ],
+              "reason": "factual query 应触发 query_classifier"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-LIVE-002",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "live",
+        "smoke"
+      ],
+      "description": "Corpus · Live FAQ · TUILiveKit 礼物组件与 API",
+      "corpus_meta": {
+        "product": "Live",
+        "intent": "capability_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "TUILiveKit 是否有礼物相关的组件？GiftPanel 或者礼物面板组件如何获取礼物列表？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-TRTC-001",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "trtc",
+        "smoke"
+      ],
+      "description": "Corpus · TRTC FAQ · 永久房间与生命周期概念",
+      "corpus_meta": {
+        "product": "TRTC",
+        "intent": "concept_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "TRTC 是否支持创建永久房间？房间的生命周期是怎样的？所有人退出后会自动销毁吗？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-CALL-001",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "call",
+        "smoke"
+      ],
+      "description": "Corpus · Call FAQ · TUICallKit 头像配置",
+      "corpus_meta": {
+        "product": "Call",
+        "intent": "capability_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "如何设置 TUICallKit 的头像，使用卡通头像或者默认头像？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-CALL-002",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "call",
+        "smoke"
+      ],
+      "description": "Corpus · Call FAQ · TUICallKit calls 接口工作原理",
+      "corpus_meta": {
+        "product": "Call",
+        "intent": "api_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "TUICallKit calls 接口工作原理，拨号流程，跳过拨号直接建立通话",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "P2-CORPUS-ROOM-001",
+      "phase": "p2",
+      "category": "faq",
+      "tags": [
+        "corpus",
+        "room",
+        "smoke"
+      ],
+      "description": "Corpus · Room FAQ · TUIRoomKit Vue3 云端录制能力",
+      "corpus_meta": {
+        "product": "Room",
+        "intent": "capability_lookup",
+        "source": "seed-2026-07-14"
+      },
+      "turns": [
+        {
+          "user": "TUIRoomKit Vue3 预制 UI 中是否包含云端录制功能？录制按钮、录制状态显示、如何开启录制？",
+          "expect": {
+            "route_triggered": {
+              "skill": "trtc"
+            },
+            "route_level1": {
+              "target": "trtc-docs",
+              "must_not": [
+                "trtc-conference",
+                "trtc-chat"
+              ]
+            },
+            "reporting_called": {
+              "scripts": [
+                "reporting.py prompt"
+              ]
+            },
+            "tools_called": {
+              "required": [
+                "query_classifier"
+              ]
+            }
+          }
+        }
+      ]
     }
   ]
 }
