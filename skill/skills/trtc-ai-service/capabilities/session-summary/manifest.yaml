@@ -1,0 +1,165 @@
+# session-summary capability self-describing manifest
+# Type: capability (optional install)
+
+name: "session-summary"
+version: "1.0.0"
+type: "capability"
+description: "Automatic session summarization + structured summary output (turn recording / key fact extraction / LLM secondary summarization)"
+
+dependencies:
+  - name: "conversation-core"
+    version: ">=1.0.0,<2.0.0"
+
+# Optional integration (soft dependency, not hard dependency):
+# When human-handoff is also installed, ticket creation will auto-trigger this capability
+# to generate a summary for that session and attach it to the ticket. Agents can see the
+# customer issue context directly in the dashboard ticket details (no need to manually click "generate summary").
+# The integration is implemented as a best-effort call from human-handoff (capabilities/human-handoff/src/summary_link.py);
+# when this capability is not installed, the call silently skips without affecting the handoff main flow.
+optional_integrations:
+  - capability: "human-handoff"
+    trigger: "ticket.create"
+    behavior: "auto-finalize session summary (heuristic) and embed into ticket payload"
+
+extensions:
+  # Archive as a user turn before text injection
+  - inject_at: "agent.before_push_text"
+    inline_code: |
+      # [session-summary] record user turn
+      from ._capability_loader import try_load_capability
+      _ss_recorder = try_load_capability("session-summary", "src/recorder.py")
+      if _ss_recorder is not None:
+          _ss_recorder.record_user_turn(session_id, text)
+  - inject_at: "agent.after_start"
+    inline_code: |
+      # [session-summary] open session
+      from ._capability_loader import try_load_capability
+      _ss_recorder = try_load_capability("session-summary", "src/recorder.py")
+      if _ss_recorder is not None:
+          _ss_recorder.open_session(session_id)
+  - inject_at: "server.router_extension"
+    inline_code: |
+      # [session-summary] mount sub-router
+      from ._capability_loader import try_load_capability as _try_load_capability
+      _ss_router_mod = _try_load_capability("session-summary", "src/router.py")
+      if _ss_router_mod is not None and hasattr(_ss_router_mod, "router"):
+          app.include_router(
+              _ss_router_mod.router, prefix="/api/v1/summary", tags=["session-summary"]
+          )
+
+config:
+  adapter:
+    description: "Summary write-back target: mock (default, no external deps) | local_json | default_rest"
+    default: "mock"
+    env: "SS_ADAPTER"
+    options:
+      mock: "Log-only + returns mock record_id, suitable for local / Path A demos"
+      local_json: "Append to local JSONL (data/_writeback.jsonl)"
+      default_rest: "POST to real CRM / ticketing system (requires SS_REST_BASE_URL[/SS_REST_TOKEN])"
+  storage_dir:
+    description: "Summary file landing directory (one JSON per session)"
+    default: "capabilities/session-summary/data/"
+  llm_summary:
+    description: "Whether to enable LLM secondary summarization (consumes LLM_API_KEY; set false for offline scenarios)"
+    default: true
+  retention_days:
+    description: "Summary retention days; auto-cleanup after expiry"
+    default: 30
+  redact_patterns:
+    description: "Fields to auto-redact before writing summaries (same standard as skeleton log_redaction)"
+    default:
+      - "secret_id"
+      - "secret_key"
+      - "api_key"
+      - "token"
+
+endpoints:
+  - method: GET
+    path: /api/v1/summary/{session_id}
+    description: Get single session summary (includes turn list and structured summary)
+  - method: POST
+    path: /api/v1/summary/{session_id}/finalize
+    description: Close session and trigger LLM secondary summarization
+  - method: GET
+    path: /api/v1/summary/_list
+    description: List most recent N summaries (_offset / _limit query)
+
+integration:
+  mode: "auto"
+  auto_adapters:
+    - tech_stack: ["express", "koa", "fastify"]
+      adapter: "node-backend"
+    - tech_stack: ["flask", "fastapi", "django"]
+      adapter: "python-backend"
+    - tech_stack: ["react", "vue", "angular"]
+      adapter: "frontend-spa"
+      description: "Append summary viewer panel to SPA"
+  fallback:
+    guided_templates:
+      - "../../auto_adapters/integration_templates/generic-backend.md"
+    manual_api:
+      rest_endpoint: "/api/v1/summary"
+
+security:
+  log_redaction:
+    enabled: true
+    patterns: ["secret_id", "secret_key", "api_key", "token", "credential"]
+  storage:
+    file_permission: "0600"
+
+# ---------------------------------------------------------------------------
+# Business contract (Phase 3 new; follows references/business-contract-spec.md v1.0)
+# Note: Source code for this capability is not refactored in this phase (compromise strategy);
+# only declares the external contract for contract-adapt.py consumption.
+# ---------------------------------------------------------------------------
+business_contract:
+  port_class: "src.adapters.base.SummarySink"
+  default_adapter: "src.adapters.default_rest.DefaultRestSink"
+  mock_adapter: "src.adapters.mock.MockSink"
+  customization_sop: "INTERFACE_ADAPT.md"
+  external_apis:
+    # CRM / Ticketing: write session summary back
+    - name: summary.write_to_crm
+      direction: outbound
+      method: POST
+      path: /sessions/{session_id}/summary
+      description: "After session finalize, write structured summary to user's CRM / ticketing / data platform"
+      request_schema:
+        session_id: string
+        user_id: string
+        topic: string
+        outcome: enum[resolved, transferred, abandoned, follow_up]
+        next_actions: string[]
+        full_transcript: string[]
+        structured_facts: object
+        finalized_at: int
+      response_schema:
+        record_id: string
+        accepted: bool
+      adapter_slots:
+        - request.topic
+        - request.outcome
+        - request.next_actions
+        - request.structured_facts
+        - response.record_id
+      auth:
+        type: bearer
+        location: header
+        name: Authorization
+      timeout_ms: 5000
+
+    # Secondary summarization call (reuses conversation-core LLM interface; declared here only as reference)
+    - name: summary.llm_summarize
+      direction: outbound
+      description: "Reuses conversation-core llm.chat_completions interface;
+                    uses same LLM_API_URL / LLM_API_KEY config; no separate adaptation needed."
+      method: POST
+      path: "(see conversation-core: llm.chat_completions)"
+      request_schema: {}
+      response_schema: {}
+      adapter_slots: []
+
+acceptance:
+  - "Each user/assistant turn persisted as JSONL"
+  - "After calling finalize, produce structured summary (includes topics / next_actions)"
+  - "File permissions set to 0600, sensitive fields auto-redacted"

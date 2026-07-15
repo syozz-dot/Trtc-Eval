@@ -1,0 +1,57 @@
+# frontend-spa adapter manifest
+# Rendered by Agent when targeting a frontend SPA project (React / Vue / Angular / Next).
+
+name: "frontend-spa"
+version: "1.0.0"
+target_role: "frontend"
+tech_stack: ["react", "vue", "angular", "next"]
+
+# Render entries: tech_stack -> template file + default target path + install hints
+templates:
+  react:
+    file: "react/VoiceAgent.tsx.tpl"
+    target_path: "src/components/${COMPONENT_NAME}.tsx"
+    install_hint: |
+      In your root component render section, add:
+        import { ${COMPONENT_NAME} } from './components/${COMPONENT_NAME}';
+        <${COMPONENT_NAME} />
+    package_dependencies:
+      - "trtc-sdk-v5@>=5.0.0"
+  next:
+    file: "react/VoiceAgent.tsx.tpl"
+    target_path: "components/${COMPONENT_NAME}.tsx"
+    install_hint: |
+      In app/page.tsx (or pages/index.tsx):
+        'use client';
+        import dynamic from 'next/dynamic';
+        const ${COMPONENT_NAME} = dynamic(() => import('@/components/${COMPONENT_NAME}'), { ssr: false });
+    package_dependencies:
+      - "trtc-sdk-v5@>=5.0.0"
+  vue:
+    file: "vue/VoiceAgent.vue.tpl"
+    target_path: "src/components/${COMPONENT_NAME}.vue"
+    install_hint: |
+      In parent component:
+        <script setup>import ${COMPONENT_NAME} from './components/${COMPONENT_NAME}.vue'</script>
+        <template><${COMPONENT_NAME} /></template>
+    package_dependencies:
+      - "trtc-sdk-v5@>=5.0.0"
+  angular:
+    file: "angular/voice-agent.component.ts.tpl"
+    target_path: "src/app/voice-agent/voice-agent.component.ts"
+    install_hint: |
+      Add VoiceAgentComponent to your NgModule's declarations;
+      use <app-voice-agent></app-voice-agent> in your template.
+    package_dependencies:
+      - "trtc-sdk-v5@>=5.0.0"
+
+# 默认变量（被顶层 default_variables 覆盖）
+defaults:
+  SKELETON_BASE_URL: "http://localhost:3000"
+  API_PREFIX: "/api/v1"
+  COMPONENT_NAME: "VoiceAgent"
+
+# 安全
+security:
+  csp_hint: "TRTC SDK 需要允许 wss://*.trtc.tencent-cloud.com 与 https://${SKELETON_BASE_URL}"
+  https_required: true

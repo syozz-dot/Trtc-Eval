@@ -1,0 +1,27 @@
+integration_modes:
+  full:
+    label: "完整聊天（登录 + 会话列表 + 聊天窗口）"
+    delivery_units:
+      - id: auth-and-shell
+        label: "鉴权与登录页"
+        slices: [chat/login-auth]
+      - id: conversation
+        label: "会话列表"
+        slices: [chat/conversation-list]
+      - id: messaging
+        label: "消息区"
+        slices: [chat/message-list, chat/message-input]
+  direct:
+    label: "直连对话（无会话列表）"
+    delivery_units:
+      - id: auth-composable
+        label: "鉴权封装"
+        slices: [chat/login-auth]
+      - id: messaging
+        label: "消息区"
+        slices: [chat/message-list, chat/message-input]
+      - id: entry
+        label: "入口组件"
+        slices: [chat/direct-chat-entry]
+
+extension_layers: [features]

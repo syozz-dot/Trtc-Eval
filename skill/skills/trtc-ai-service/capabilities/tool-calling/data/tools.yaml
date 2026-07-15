@@ -1,0 +1,58 @@
+# tool-calling default tool registry — generic AI customer service toolset (industry-neutral)
+#
+# Dual-track notes:
+#   alpha (α track) = local function / mock implementation: works out of the box, no real backend needed, easy local demo
+#   beta  (β track) = remote HTTPS API: point the endpoint at your real business system
+# Default priority=alpha: prefer local mock; change priority or pass priority=beta in a single invoke to force real API.
+# When interfaces don't align, refer to INTERFACE_ADAPT.md for request/response field mapping.
+
+priority: alpha    # alpha | beta | manifest_order
+
+tools:
+  - name: query_order_status
+    description: "Query document/order/ticket status (input order_id) — high-frequency customer service action"
+    alpha:
+      module: "capabilities.tool_calling.examples.local_tools"
+      function: "query_order_status"
+      timeout_ms: 600
+    beta:
+      endpoint: "https://api.example.com/v1/orders/status"
+      method: "POST"
+      timeout_ms: 5000
+      headers: {}
+
+  - name: get_business_info
+    description: "Query business info: hours/address/contact (topic=hours|address|contact|all)"
+    alpha:
+      module: "capabilities.tool_calling.examples.local_tools"
+      function: "get_business_info"
+      timeout_ms: 400
+    beta:
+      endpoint: "https://api.example.com/v1/business/info"
+      method: "GET"
+      timeout_ms: 5000
+      headers: {}
+
+  - name: book_appointment
+    description: "Create appointment/booking: restaurant reservations, service appointments, etc. (date, time_slot, party_size)"
+    alpha:
+      module: "capabilities.tool_calling.examples.local_tools"
+      function: "book_appointment"
+      timeout_ms: 800
+    beta:
+      endpoint: "https://api.example.com/v1/appointments"
+      method: "POST"
+      timeout_ms: 5000
+      headers: {}
+
+  - name: submit_feedback
+    description: "Submit satisfaction rating/feedback (rating 1-5, comment) — common end-of-session action"
+    alpha:
+      module: "capabilities.tool_calling.examples.local_tools"
+      function: "submit_feedback"
+      timeout_ms: 400
+    beta:
+      endpoint: "https://api.example.com/v1/feedback"
+      method: "POST"
+      timeout_ms: 5000
+      headers: {}

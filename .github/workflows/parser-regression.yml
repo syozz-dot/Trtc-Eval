@@ -40,7 +40,7 @@ jobs:
         id: reg
         run: |
           set +e
-          python3 tests/test_parser_regression.py 2>&1 | tee /tmp/reg.log
+          python3 eval/tests/test_parser_regression.py 2>&1 | tee /tmp/reg.log
           rc=${PIPESTATUS[0]}
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit $rc
@@ -74,7 +74,7 @@ jobs:
         id: scan
         run: |
           set +e
-          python3 scripts/scan_sensitive.py 2>&1 | tee /tmp/scan.log
+          python3 eval/scripts/scan_sensitive.py 2>&1 | tee /tmp/scan.log
           rc=${PIPESTATUS[0]}
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit $rc
@@ -120,8 +120,9 @@ jobs:
           from pathlib import Path
 
           repo = Path.cwd()
-          sys.path.insert(0, str(repo))
-          sys.path.insert(0, str(repo / "phase3"))
+          # Monorepo: eval scripts live under eval/, phase3 under eval/phase3.
+          sys.path.insert(0, str(repo / "eval"))
+          sys.path.insert(0, str(repo / "eval" / "phase3"))
 
           from phase3.eval_runner import inject, restore, HOOK_MARKER_COMMAND
           from run_eval import _match_trace_assertions
@@ -155,7 +156,7 @@ jobs:
                   "tool_response": {"file": {"numLines": 100, "totalLines": 200, "content": "SECRET"}}
               })
               r = subprocess.run(
-                  ["python3", str(repo / "phase3/trace_posttooluse.py")],
+                  ["python3", str(repo / "eval" / "phase3" / "trace_posttooluse.py")],
                   input=envelope, capture_output=True, text=True,
                   env={**os.environ, "XDG_CACHE_HOME": str(cache)},
               )

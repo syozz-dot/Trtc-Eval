@@ -1,0 +1,20 @@
+[
+  {
+    "id": "faq_shipping_time",
+    "question": "What is the typical shipping time?",
+    "answer": "Standard shipping takes 3-5 business days; express shipping arrives within 1-2 business days.",
+    "keywords": ["shipping", "delivery", "tracking", "logistics"]
+  },
+  {
+    "id": "faq_return_policy",
+    "question": "How do I return a product?",
+    "answer": "Return requests can be filed within 30 days of delivery. Visit Account > Orders to initiate a return.",
+    "keywords": ["return", "refund", "exchange", "money back"]
+  },
+  {
+    "id": "faq_change_address",
+    "question": "Can I change the shipping address after ordering?",
+    "answer": "You can update the shipping address before the order enters the picking stage. Use Order Detail > Modify Address.",
+    "keywords": ["address", "modify", "change shipping", "update address"]
+  }
+]

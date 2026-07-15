@@ -1,0 +1,250 @@
+# conversation-core capability self-describing manifest
+# Type: skeleton (always installed by default; no built-in business scenarios)
+
+name: "conversation-core"
+version: "1.0.0"
+type: "skeleton"
+description: "Generic Voice Agent skeleton providing ASR/LLM/TTS/session management core capabilities without any built-in business logic"
+
+# ---------------------------------------------------------------------------
+# Dependency declaration
+# ---------------------------------------------------------------------------
+dependencies: []   # Skeleton layer has no dependencies
+
+# ---------------------------------------------------------------------------
+# Injection points (for Phase 2 capability overlay)
+# Convention: position field uses before:function_name / after:function_name / replace:function_name
+# ---------------------------------------------------------------------------
+injection_points:
+  - id: "agent.before_start"
+    target: "src/agent.py"
+    position: "before:_ext_before_start_"
+    description: "Inject code inside the start_agent method body (e.g. prepend KB search results to instructions); anchor is inside start_agent method body to ensure access to local variables like config/info"
+
+  - id: "agent.after_start"
+    target: "src/agent.py"
+    position: "before:_ext_after_start_"
+    description: "Inject session-level hooks after the AI task is successfully launched (e.g. initialize human handoff state machine); anchor is inside start_agent method body"
+
+  - id: "agent.before_push_text"
+    target: "src/agent.py"
+    position: "before:_ext_before_push_text_"
+    description: "Intercept before text injection is sent (e.g. keyword-triggered handoff / tool calling); anchor is inside push_text method body"
+
+  - id: "server.router_extension"
+    target: "src/server.py"
+    position: "after:app.include_router"
+    description: "Append business capability FastAPI sub-routers"
+
+  - id: "modality.channel_resolver"
+    target: "src/modality.py"
+    position: "replace:resolve_input_channel"
+    description: "Override default channel selection strategy, e.g. disable voice input in e-commerce scenarios"
+
+# ---------------------------------------------------------------------------
+# Configuration interface
+# ---------------------------------------------------------------------------
+config:
+  credentials:
+    - key: "TENCENT_CLOUD_SECRET_ID"
+      required: true
+      description: "Tencent Cloud API SecretId (Key 1)"
+    - key: "TENCENT_CLOUD_SECRET_KEY"
+      required: true
+      description: "Tencent Cloud API SecretKey (Key 1)"
+    - key: "TENCENT_CLOUD_REGION"
+      required: false
+      default: "ap-guangzhou"
+      description: "Tencent Cloud API region"
+    - key: "TRTC_SDK_APP_ID"
+      required: true
+      description: "TRTC Conversational AI application SDKAppID (Key 2)"
+    - key: "TRTC_SDK_SECRET_KEY"
+      required: true
+      description: "TRTC Conversational AI application SDKSecretKey (Key 2)"
+    - key: "LLM_API_KEY"
+      required: true
+      description: "External LLM access key (Key 3)"
+    - key: "LLM_API_URL"
+      required: false
+      default: "https://api.openai.com/v1/chat/completions"
+      description: "OpenAI-compatible protocol endpoint"
+    - key: "LLM_MODEL"
+      required: false
+      default: "gpt-4o-mini"
+      description: "Default LLM model name"
+
+  io_modality:
+    voice_input:
+      enabled: true
+      provider: "trtc-asr"
+      fallback: "text_input"
+      timeout_ms: 5000
+    text_input:
+      enabled: true
+      provider: null
+      fallback: null
+      timeout_ms: 0
+    voice_output:
+      enabled: true
+      provider: "trtc-tts"
+      fallback: "text_output"
+      timeout_ms: 3000
+    text_output:
+      enabled: true
+      provider: null
+      fallback: null
+      timeout_ms: 0
+
+# ---------------------------------------------------------------------------
+# Exposed API endpoints
+# ---------------------------------------------------------------------------
+endpoints:
+  - method: GET
+    path: /api/v1/health
+    description: Real-time connectivity self-check for 3 keys (Web Demo status bar data source)
+  - method: POST
+    path: /api/v1/get_config
+    description: Issue room number / UserSig / modality configuration
+  - method: POST
+    path: /api/v1/agent/start
+    description: Start AI channel bot (StartAIConversation)
+  - method: POST
+    path: /api/v1/agent/stop
+    description: Stop AI channel bot (StopAIConversation)
+  - method: POST
+    path: /api/v1/agent/control
+    description: Text injection / interruption (ControlAIConversation/ServerPushText)
+  - method: GET
+    path: /api/v1/sessions
+    description: In-memory session list (debugging only)
+
+# ---------------------------------------------------------------------------
+# Tech stack integration rules
+# ---------------------------------------------------------------------------
+integration:
+  mode: "auto"
+  auto_adapters:
+    - tech_stack: ["react", "vue", "angular"]
+      adapter: "frontend-spa"
+      description: "Frontend SPA adapter, generates join-room component and embeds web-demo to call skeleton API"
+    - tech_stack: ["express", "koa", "fastify", "next"]
+      adapter: "node-backend"
+      description: "Node.js backend adapter, generates proxy routes forwarding to skeleton /api/v1/*"
+    - tech_stack: ["spring-boot", "quarkus"]
+      adapter: "java-backend"
+      description: "Java backend adapter, generates Filter forwarding to skeleton"
+    - tech_stack: ["flask", "fastapi", "django"]
+      adapter: "python-backend"
+      description: "Python backend adapter, generates decorators or sub-app mounting"
+  fallback:
+    guided_templates:
+      - "integration-templates/generic-frontend.md"
+      - "integration-templates/generic-backend.md"
+    manual_api:
+      rest_endpoint: "/api/v1"
+      sdk_packages:
+        - npm: "@trtc/voice-agent-sdk"
+        - maven: "com.tencent.trtc:voice-agent-sdk"
+        - pypi: "trtc-voice-agent"
+
+# ---------------------------------------------------------------------------
+# Business contract (Phase 3; follows references/business-contract-spec.md v1.0)
+# Note: This is a skeleton capability; source code is not refactored in this phase;
+# only declares the external contract for contract-adapt.py consumption.
+# port_class / default_adapter fields remain null, to be filled in Phase 4 refactor.
+# ---------------------------------------------------------------------------
+business_contract:
+  port_class: null
+  default_adapter: null
+  mock_adapter: null
+  customization_sop: "INTERFACE_ADAPT.md"
+  external_apis:
+    # LLM: OpenAI-compatible protocol is the default contract; can be replaced with Claude / Qwen / DeepSeek etc.
+    - name: llm.chat_completions
+      direction: outbound
+      method: POST
+      path: /v1/chat/completions
+      description: "Call external LLM for text response (OpenAI Chat Completions compatible protocol)"
+      request_schema:
+        model: string
+        messages:
+          - role: enum[system, user, assistant, tool]
+            content: string
+        temperature: float
+        max_tokens: int
+        stream: bool
+      response_schema:
+        choices:
+          - message:
+              role: string
+              content: string
+            finish_reason: string
+        usage:
+          prompt_tokens: int
+          completion_tokens: int
+      adapter_slots:
+        - request.model
+        - request.messages
+        - response.choices
+      auth:
+        type: bearer
+        location: header
+        name: Authorization
+      timeout_ms: 30000
+
+    # Tencent Cloud TRTC Conversational AI (control plane): StartAIConversation etc.
+    # Unlike LLM, the TRTC control plane contract is not adaptable (tightly bound to Tencent Cloud);
+    # declared here only for assembly-phase awareness
+    - name: trtc.start_ai_conversation
+      direction: outbound
+      method: POST
+      path: "tencentcloudapi.com/?Action=StartAIConversation"
+      description: "Tencent Cloud TRTC control plane: launch AI conversation (tightly bound to Tencent Cloud protocol, not adaptable)"
+      request_schema:
+        SdkAppId: int
+        RoomId: string
+        AgentConfig: object
+        STTConfig: object
+        LLMConfig: object
+        TTSConfig: object
+      response_schema:
+        TaskId: string
+        SessionId: string
+      adapter_slots: []        # No remapping allowed
+      timeout_ms: 10000
+
+# ---------------------------------------------------------------------------
+# Security declarations (P0 mitigations in place)
+# ---------------------------------------------------------------------------
+security:
+  log_redaction:
+    enabled: true
+    patterns:
+      - "secret_id"
+      - "secret_key"
+      - "api_key"
+      - "app_key"
+      - "token"
+      - "usersig"
+      - "credential"
+      - "authorization"
+  injection_protection:
+    xss_guard: true
+    prompt_injection_guard: true
+  credential_storage:
+    source: "env-only"     # Credentials only from environment variables
+    cache_file: ".credentials_cache"
+    cache_permission: "0600"
+    env_file_permission: "0600"
+  network:
+    enforce_https: true    # End-to-end HTTPS
+
+# ---------------------------------------------------------------------------
+# Acceptance criteria (aligned with dev guide §11.1)
+# ---------------------------------------------------------------------------
+acceptance:
+  - "ASR/LLM/TTS pipeline has no hard-coded business logic"
+  - "3-key connectivity self-check executed immediately upon input"
+  - "Web Demo top status bar: all 3 indicator LEDs green"
+  - "Credential cache file permissions set to 600; no plain-text keys in logs"

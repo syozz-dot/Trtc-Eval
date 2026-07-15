@@ -1,0 +1,146 @@
+# tool-calling capability self-describing manifest
+# Type: capability (optional install)
+# Risk mitigation: P1 alpha/beta dual-track priority arbitration (manifest explicitly declares priority)
+
+name: "tool-calling"
+version: "1.0.0"
+type: "capability"
+description: "Business tool calling - alpha/beta dual-track (local function first, remote API as fallback) + result re-injection"
+
+dependencies:
+  - name: "conversation-core"
+    version: ">=1.0.0,<2.0.0"
+
+# ---------------------------------------------------------------------------
+# Injection extensions into skeleton
+# ---------------------------------------------------------------------------
+extensions:
+  - inject_at: "agent.before_push_text"
+    inline_code: |
+      # [tool-calling] intercept text injection: recognize "/tool name args" to trigger local tool call
+      from ._capability_loader import try_load_capability
+      _tc_dispatcher = try_load_capability("tool-calling", "src/dispatcher.py")
+      if _tc_dispatcher is not None:
+          _hijack = _tc_dispatcher.maybe_dispatch(text)
+          if _hijack is not None:
+              # Replace original text with tool result, ensuring LLM receives tool-augmented content
+              text = _hijack
+  - inject_at: "server.router_extension"
+    inline_code: |
+      # [tool-calling] mount sub-router
+      from ._capability_loader import try_load_capability as _try_load_capability
+      _tc_router_mod = _try_load_capability("tool-calling", "src/router.py")
+      if _tc_router_mod is not None and hasattr(_tc_router_mod, "router"):
+          app.include_router(
+              _tc_router_mod.router, prefix="/api/v1/tools", tags=["tool-calling"]
+          )
+
+# ---------------------------------------------------------------------------
+# Configuration interface (alpha/beta dual-track)
+# ---------------------------------------------------------------------------
+config:
+  priority:
+    description: "Priority arbitration rule: alpha | beta | manifest_order"
+    default: "alpha"
+  timeout_ms_alpha:
+    default: 1000
+  timeout_ms_beta:
+    default: 5000
+  retry_alpha:
+    default: 0
+  retry_beta:
+    default: 1
+  registry_file:
+    description: "Tool registration declaration file (YAML), supports hot-reload"
+    default: "capabilities/tool-calling/data/tools.yaml"
+
+# ---------------------------------------------------------------------------
+# API endpoints
+# ---------------------------------------------------------------------------
+endpoints:
+  - method: GET
+    path: /api/v1/tools/list
+    description: List registered alpha/beta tools and their priority
+  - method: POST
+    path: /api/v1/tools/invoke
+    description: "Explicit tool invocation (body shape: {name, params, priority?})"
+  - method: POST
+    path: /api/v1/tools/reload
+    description: "Hot-reload registry"
+
+# ---------------------------------------------------------------------------
+# Integration rules
+# ---------------------------------------------------------------------------
+integration:
+  mode: "auto"
+  auto_adapters:
+    - tech_stack: ["express", "koa", "fastify", "next"]
+      adapter: "node-backend"
+      description: "Register beta-track remote tool implementation in Node.js backend"
+    - tech_stack: ["flask", "fastapi", "django"]
+      adapter: "python-backend"
+      description: "Directly register alpha-track local function in Python backend"
+    - tech_stack: ["spring-boot", "quarkus"]
+      adapter: "java-backend"
+      description: "Expose beta-track REST endpoints via Filter"
+  fallback:
+    guided_templates:
+      - "../../auto_adapters/integration_templates/generic-backend.md"
+    manual_api:
+      rest_endpoint: "/api/v1/tools"
+
+security:
+  log_redaction:
+    enabled: true
+    patterns: ["api_key", "token", "credential", "authorization"]
+  injection_protection:
+    prompt_injection_guard: true   # Whitelist validation of tool trigger keywords before entering LLM
+  network:
+    enforce_https: true            # Beta-track remote calls enforce HTTPS
+
+# ---------------------------------------------------------------------------
+# Business contract (Phase 3 new; follows references/business-contract-spec.md v1.0 §5)
+# tool-calling uses its own contract section (alpha/beta/arbitration), not the port/adapter template.
+# Source code is not refactored in this phase (compromise strategy); only declares contract for contract-adapt.py consumption.
+# ---------------------------------------------------------------------------
+business_contract:
+  customization_sop: "INTERFACE_ADAPT.md"
+
+  # Alpha track: local function registration specification
+  alpha_track:
+    interface: "src.dispatcher.LocalToolHandler"          # Equivalent abstraction in existing dispatcher
+    registration_schema:
+      name: string                  # Tool name (globally unique, snake_case)
+      description: string           # One-line description for LLM consumption
+      parameters: object            # JSON Schema describing parameters
+      handler: callable             # Sync/async Python callable
+    invocation_schema:
+      input: object                 # Same schema as parameters
+      output: object                # User-defined return structure (must be JSON-serializable)
+    fail_fast: true                 # Local exceptions thrown immediately for arbitration decision
+
+  # Beta track: remote business API integration specification
+  beta_track:
+    interface: "src.dispatcher.RemoteToolClient"          # Remote HTTP/RPC client abstraction
+    api_schema:
+      method: enum[GET, POST, PUT, DELETE, PATCH]
+      path: string
+      request_schema: object        # JSON Schema
+      response_schema: object       # JSON Schema
+      auth: enum[bearer, api_key, none]
+    timeout_ms: 5000
+    retry:
+      max: 1
+      backoff_ms: 200
+
+  # Arbitration rules
+  arbitration:
+    default_priority: alpha         # alpha | beta | manifest_order
+    fallback_on_failure: true
+    timeout_ms: 3000                # Single-track call timeout; triggers fallback on expiry
+    merge_strategy: first_success   # first_success | alpha_then_beta_diff
+
+acceptance:
+  - "Provide ToolRegistry supporting simultaneous alpha/beta implementation declarations"
+  - "Default alpha-first; auto-degraded to beta on alpha failure/unavailability"
+  - "REST endpoints available immediately after skeleton startup"

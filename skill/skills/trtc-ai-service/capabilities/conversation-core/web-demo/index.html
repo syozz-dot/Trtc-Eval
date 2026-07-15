@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TRTC Conversational AI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="status-bar" id="status-bar">
+    <div class="brand">
+      <span class="dot"></span>
+      <strong>TRTC Conversational AI</strong>
+    </div>
+    <div class="indicators" role="status" aria-live="polite">
+      <div class="indicator" data-key="tencent_cloud">
+        <span class="led led-unknown"></span>
+        <span class="label">Tencent Cloud</span>
+        <span class="latency">--</span>
+      </div>
+      <div class="indicator" data-key="trtc">
+        <span class="led led-unknown"></span>
+        <span class="label">TRTC</span>
+        <span class="latency">--</span>
+      </div>
+      <div class="indicator" data-key="llm">
+        <span class="led led-unknown"></span>
+        <span class="label">LLM</span>
+        <span class="latency">--</span>
+      </div>
+      <button id="btn-recheck" class="btn btn-ghost" type="button">Recheck</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="conversation" id="conversation">
+      <div class="placeholder">
+        <h1>Voice Agent Demo</h1>
+        <p>All three indicators must be green before starting.</p>
+        <ul class="hint-list">
+          <li>Click <em>Start</em> to join the room and bring up the AI agent.</li>
+          <li>Click <em>Mic</em> to talk; the AI will answer with voice + live captions.</li>
+          <li>Or type a message — the AI will reply by voice + caption too.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="control-bar">
+    <button id="btn-start" class="btn btn-primary" type="button" disabled>Start</button>
+    <button id="btn-mic" class="btn btn-ghost" type="button" disabled title="Push-to-talk">
+      <span id="mic-icon">🎙️</span> <span id="mic-label">Mic off</span>
+    </button>
+    <button id="btn-stop" class="btn btn-danger" type="button" disabled>Hang up</button>
+    <div class="text-input-group">
+      <input id="text-input" type="text" placeholder="Type a message and press Enter..." disabled />
+      <button id="btn-send" class="btn btn-ghost" type="button" disabled>Send</button>
+    </div>
+    <div class="agent-status" id="agent-status" aria-live="polite">
+      <span class="agent-state agent-state-idle">idle</span>
+    </div>
+  </footer>
+
+  <!-- TRTC Web SDK v5 -->
+  <script src="https://web.sdk.qcloud.com/trtc/webrtc/v5/dist/trtc.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

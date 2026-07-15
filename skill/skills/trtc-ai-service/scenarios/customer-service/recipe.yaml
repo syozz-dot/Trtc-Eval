@@ -1,0 +1,154 @@
+# =====================================================================
+# Path A Default Recipe —— AI Customer Service (neutral industry baseline)
+#
+# This file is parsed by the SKILL.md Path A SOP, and is **not** input to add-capability.py.
+# The Coding Agent executes it item by item as an "assembly instruction list"; users do not run this file directly.
+#
+# Aligned with references/business-contract-spec.md v1.0, design_tokens.json v1.1.0.
+# =====================================================================
+apiVersion: ai-customer-service/v1
+kind: Recipe
+metadata:
+  name: customer-service-default
+  scenario: customer-service
+  version: "1.1.0"
+  description: "Default AI Customer Service Demo (Voice Agent UI + silent FAQ retrieval + handoff progress simulation + Mock product/order)"
+  industry: "neutral"            # Neutral baseline; specific industry determined by user's "business description" before launch
+  language: "en"                 # UI defaults to English; targeting overseas developers
+
+# ---------------------------------------------------------------------------
+# Capability assembly list
+# AI executes at Path A Step 2:
+#   python3 scripts/add-capability.py knowledge-base human-handoff --apply --json
+# ---------------------------------------------------------------------------
+capabilities:
+  required:
+    - name: conversation-core      # Skeleton, already in the repo, no assembly needed
+      role: skeleton
+  install:
+    - name: knowledge-base
+      role: capability
+      adapter: mock                # Default mock, ready out of the box; switch to local_json / default_rest before production
+      env:
+        KB_ADAPTER: mock           # Aligned with capabilities/knowledge-base/manifest.yaml.config.adapter
+        KB_TOP_K: "3"
+        KB_MIN_SCORE: "0.1"
+    - name: human-handoff
+      role: capability
+      adapter: local_queue         # Default local queue; switch to default_rest for real ticketing system
+      env:
+        HH_ADAPTER: local_queue
+    - name: session-summary        # Default installed: supplies LLM chat summary for handoff ticket Description
+      role: capability
+  optional:                        # Not installed by default in Path A; Path B users can select
+    - name: tool-calling
+  excluded:
+    - name: digital-human          # Placeholder capability, not participating in this release
+
+# ---------------------------------------------------------------------------
+# AI behavior configuration
+# ---------------------------------------------------------------------------
+agent_runtime:
+  language: "zh"                   # Default Chinese; choose en or zh
+  voice_id: ""                     # Empty → conversation-core DEFAULT_VOICE_IDS selects by language
+  greeting: "Hello, this is AI Customer Service. How can I help you?"
+  max_idle_time: 60
+  system_prompt:
+    template_file: "system-prompt.template.md"
+    variables:
+      business_desc: "{{ business_desc }}"          # AI asks user once before launch and fills in
+      business_name: "{{ business_name | default('we') }}"
+
+# ---------------------------------------------------------------------------
+# UI overlay —— Default voice-customer-service (real Voice Agent customer service)
+#
+# Design rationale:
+#   `widget-floating` is a "lightweight IM demo", does **not** open a TRTC channel;
+#   `voice-customer-service` is a true Voice Agent UI (TRTC enterRoom + agent/start
+#   full pipeline), layered with silent FAQ retrieval + handoff queue progress bar +
+#   product/order business panel — the **default artifact** for Path A;
+#   `widget-floating` / `admin-board` can still be manually overlaid as needed.
+#
+# Assembly steps (AI executes after Step 2, before Step 3; recommended to auto-write
+# .env defaults via post-install-patch.py, and use cp for UI overlay):
+#   cp scenarios/customer-service/ui/voice-customer-service/{index.html,app.js,styles.css,data.js,mock-shop.json,tokens.css} \
+#      capabilities/conversation-core/web-demo/
+#   mkdir -p capabilities/conversation-core/web-demo/admin
+#   cp -R scenarios/customer-service/ui/admin-board/. \
+#         capabilities/conversation-core/web-demo/admin/
+#
+# Access after startup:
+#   http://localhost:3000              AI Customer Service Voice Agent UI (default)
+#   http://localhost:3000/static/admin/ Ticket agent dashboard
+#   http://localhost:3000/api/v1/health Three-LED self-check JSON
+#   http://localhost:3000/docs         FastAPI Swagger
+# ---------------------------------------------------------------------------
+ui_overlay:
+  source_root: "scenarios/customer-service/ui"
+  target: "capabilities/conversation-core/web-demo"
+  layers:
+    - source: "voice-customer-service"
+      target: "."                  # Default override web-demo root
+      replace: true
+      files:                       # Explicit list (prevents accidentally overwriting admin/ subdirectory)
+        - "index.html"
+        - "app.js"
+        - "styles.css"
+        - "mock-shop.json"
+        - "tokens.css"
+    - source: "admin-board"
+      target: "admin"              # Subdirectory
+      replace: true
+  alternatives:
+    - name: "widget-floating"
+      description: "Lightweight text IM floating widget demo (does not start TRTC voice channel); suitable for embedding as a bottom-right component in existing web pages"
+      source: "widget-floating"
+  routes:
+    - path: "/"
+      description: "AI Customer Service Voice Agent main entry (end-user facing)"
+    - path: "/static/admin/"
+      description: "Ticket agent dashboard (operations-facing; add auth or change to /admin/tickets reverse proxy before production)"
+    - path: "/static/dev/"
+      description: "Reserved (accessible if original voice demo is backed up to dev/ subdirectory)"
+
+# ---------------------------------------------------------------------------
+# Default data source (mock demo data; replace before production)
+# ---------------------------------------------------------------------------
+sample_data:
+  faq_file: "sample-data/faq-sample.json"
+  description: "5 neutral industry FAQ entries (refund / shipping / invoice / size exchange / after-sales). Mock adapter loads into memory on startup."
+
+# ---------------------------------------------------------------------------
+# Post-launch required: contract list reminder (AI actively lists in §8, **not** auto-printed by scripts)
+# ---------------------------------------------------------------------------
+post_assembly:
+  contract_review:
+    enabled: true
+    capabilities:
+      - knowledge-base
+      - human-handoff
+    sop_section: "SKILL.md#8"
+  health_check:
+    url: "http://localhost:3000/api/v1/health"
+    expect_field: "status"
+    expect_value: "ok"
+
+# ---------------------------------------------------------------------------
+# Design language lock
+# ---------------------------------------------------------------------------
+design:
+  tokens_file: "../../design_tokens.json"
+  guidelines: "ui/design-system/DESIGN_GUIDELINES.md"
+  theme: "dark"                    # Locked to dark in this release
+  emoji_in_ui: false               # Emoji forbidden in UI (use icons + text instead)
+  font_family: "SF Pro, Inter, 'Helvetica Neue', sans-serif"
+
+# ---------------------------------------------------------------------------
+# Go-to-production guide (documentation only; AI references it, does not execute directly)
+# ---------------------------------------------------------------------------
+go_production_guide: |
+  - knowledge-base: Change KB_ADAPTER to local_json or default_rest, and configure per INTERFACE_ADAPT.md
+  - human-handoff: Change HH_ADAPTER to default_rest (connect to real ticketing system);
+    if ticket API diverges from the default contract, use SKILL.md §8.3 contract-adapt flow to generate user_custom.py
+  - Port: Default 3000; use PORT env variable for multiple instances
+  - HTTPS: bash start.sh --https (self-signed cert; in production, use a reverse proxy with a real certificate)

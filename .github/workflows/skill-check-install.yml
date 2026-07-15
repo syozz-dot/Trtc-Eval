@@ -1,13 +1,12 @@
 name: Skill Install Check (P1)
 
 # Runs on every PR and push to main, plus manual dispatch.
-# Verifies that `npx add` distributes the full asset set
+# Verifies that the skill installer distributes the full asset set
 # (SKILL.md × 6, hooks, tools, AI service scripts, plugin manifests)
 # to the correct per-IDE directories for claude-code / cursor /
 # codebuddy / codex.
 #
-# Tests the currently published @tencent-rtc/trtc-agent-skills@latest.
-# To pin a version, edit NPX_TARGET below.
+# Monorepo mode: tests skill/ from THIS checkout (not an npm version).
 #
 # Free-of-charge, deterministic, no LLM calls — safe to gate PRs on.
 
@@ -18,17 +17,12 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      npx_target:
-        description: 'npm package to test (default @tencent-rtc/trtc-agent-skills@latest). Set to a specific version like @0.1.7 to pin.'
-        required: false
-        default: '@tencent-rtc/trtc-agent-skills@latest'
-        type: string
       triggered_by:
         description: 'Optional label for who kicked this off (e.g. "agent-skills release v0.1.8")'
         required: false
         default: ''
         type: string
-  # Safety-net: catches new @latest publishes that no one dispatched manually.
+  # Safety-net: daily check that current skill/ still installs correctly.
   # 03:07 UTC = 11:07 China time; off-peak, staggered to avoid the :00 rush.
   schedule:
     - cron: '7 3 * * *'
@@ -36,10 +30,6 @@ on:
 permissions:
   contents: read
   pull-requests: write   # summarize step needs this to post the sticky comment
-
-env:
-  # workflow_dispatch input overrides the default; PR / push / schedule falls through.
-  NPX_TARGET: ${{ inputs.npx_target || '@tencent-rtc/trtc-agent-skills@latest' }}
 
 jobs:
   check-install:
@@ -51,7 +41,7 @@ jobs:
         ide: [claude-code, cursor, codebuddy, codex]
 
     steps:
-      - name: Checkout eval scripts
+      - name: Checkout monorepo (skill + eval)
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -64,14 +54,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install skill via npx (force all IDEs)
+      - name: Install skill from local monorepo (force all IDEs)
         run: |
           mkdir -p /tmp/install-target
           cd /tmp/install-target
           # --ide all: install for every supported IDE regardless of what
           # the runner has installed locally (runners have none).
           # --no-report: skip telemetry from CI.
-          npx -y "$NPX_TARGET" add --ide all --no-report
+          # Uses the local skill/ from this checkout (not published npm).
+          node "$GITHUB_WORKSPACE/skill/bin/cli.js" add --ide all --no-report
           echo "--- installed layout ---"
           for d in .claude .cursor .codebuddy .codex .agents; do
             if [ -d "$d" ]; then
@@ -84,7 +75,7 @@ jobs:
         id: p1
         run: |
           set +e
-          python3 "$GITHUB_WORKSPACE/check_install.py" \
+          python3 "$GITHUB_WORKSPACE/eval/check_install.py" \
             --repo-root /tmp/install-target \
             --ide "${{ matrix.ide }}" \
             2>&1 | tee "/tmp/p1-${{ matrix.ide }}.log"

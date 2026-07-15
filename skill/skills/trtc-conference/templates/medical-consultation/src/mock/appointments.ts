@@ -1,0 +1,96 @@
+import type { MedicalAppointment } from '@/services/adapters/types';
+
+const now = new Date();
+
+function atToday(hours: number, minutes: number) {
+  const value = new Date(now);
+  value.setHours(hours, minutes, 0, 0);
+  return Math.floor(value.getTime() / 1000);
+}
+
+export const mockAppointments: MedicalAppointment[] = [
+  {
+    id: 'APT001',
+    roomId: 'med-room-001',
+    doctorId: 'doctor_li',
+    patientId: 'patient_zhang',
+    scheduleStartTime: atToday(9, 30),
+    scheduleEndTime: atToday(10, 0),
+    chiefComplaint: 'Medical.Mock.CoughFever',
+    allergyHistory: 'Medical.Mock.PenicillinAllergy',
+    medicalHistory: 'Medical.Mock.NoMajorHistory',
+    patientAge: 35,
+    patientGender: 'Medical.Mock.Male',
+    patientPhone: '138****5678',
+  },
+  {
+    id: 'APT002',
+    roomId: 'med-room-002',
+    doctorId: 'doctor_wang',
+    patientId: 'patient_zhang',
+    scheduleStartTime: atToday(10, 10),
+    scheduleEndTime: atToday(10, 40),
+    chiefComplaint: 'Medical.Mock.NightCough',
+    allergyHistory: 'Medical.Mock.None',
+    medicalHistory: 'Medical.Mock.AllergicRhinitis',
+    patientAge: 35,
+    patientGender: 'Medical.Mock.Male',
+    patientPhone: '138****5678',
+  },
+  {
+    id: 'APT003',
+    roomId: 'med-room-003',
+    doctorId: 'doctor_zhang',
+    patientId: 'patient_zhang',
+    scheduleStartTime: atToday(11, 0),
+    scheduleEndTime: atToday(11, 30),
+    chiefComplaint: 'Medical.Mock.Reflux',
+    allergyHistory: 'Medical.Mock.None',
+    medicalHistory: 'Medical.Mock.ChronicGastritis',
+    patientAge: 35,
+    patientGender: 'Medical.Mock.Male',
+    patientPhone: '138****5678',
+  },
+  {
+    id: 'APT004',
+    roomId: 'med-room-004',
+    doctorId: 'doctor_li',
+    patientId: 'patient_li',
+    scheduleStartTime: atToday(14, 0),
+    scheduleEndTime: atToday(14, 30),
+    chiefComplaint: 'Medical.Mock.DizzyPalpitations',
+    allergyHistory: 'Medical.Mock.None',
+    medicalHistory: 'Medical.Mock.ThyroidNodule',
+    patientAge: 28,
+    patientGender: 'Medical.Mock.Female',
+    patientPhone: '186****2211',
+  },
+  {
+    id: 'APT005',
+    roomId: 'med-room-005',
+    doctorId: 'doctor_wang',
+    patientId: 'patient_li',
+    scheduleStartTime: atToday(15, 0),
+    scheduleEndTime: atToday(15, 30),
+    chiefComplaint: 'Medical.Mock.ThroatCough',
+    allergyHistory: 'Medical.Mock.PollenAllergy',
+    medicalHistory: 'Medical.Mock.MildAsthma',
+    patientAge: 28,
+    patientGender: 'Medical.Mock.Female',
+    patientPhone: '186****2211',
+  },
+  {
+    id: 'APT006',
+    roomId: 'med-room-006',
+    doctorId: 'doctor_zhang',
+    patientId: 'patient_li',
+    scheduleStartTime: atToday(16, 0),
+    scheduleEndTime: atToday(16, 30),
+    chiefComplaint: 'Medical.Mock.AbdominalPain',
+    allergyHistory: 'Medical.Mock.None',
+    medicalHistory: 'Medical.Mock.NoMajorHistory',
+    patientAge: 28,
+    patientGender: 'Medical.Mock.Female',
+    patientPhone: '186****2211',
+  },
+];

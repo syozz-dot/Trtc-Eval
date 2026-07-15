@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hooks": {
+      "beforeReadFile": [
+      {
+        "command": "python3 $HOME/.cursor/plugins/local/trtc-agent-skills/hooks/cursor-adapter.py gate-slice-read"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "python3 $HOME/.cursor/plugins/local/trtc-agent-skills/hooks/cursor-adapter.py topic-phase-gate"
+      },
+      {
+        "command": "python3 $HOME/.cursor/plugins/local/trtc-agent-skills/hooks/cursor-adapter.py gate-slice-write"
+      },
+      {
+        "command": "python3 $HOME/.cursor/plugins/local/trtc-agent-skills/hooks/cursor-adapter.py pretooluse-require-business-decisions"
+      }
+    ],
+    "stop": [
+      {
+        "command": "python3 $HOME/.cursor/plugins/local/trtc-agent-skills/hooks/cursor-adapter.py stop-apply-evidence"
+      }
+    ]
+  }
+}

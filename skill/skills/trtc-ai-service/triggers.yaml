@@ -1,0 +1,29 @@
+# trtc-ai-service trigger word registry
+#
+# Documentation only — routing logic is inlined in skills/trtc/SKILL.md.
+# Do NOT reference this file as a runtime routing dependency.
+#
+# Purpose: single source of truth for what triggers the AI service fast-path,
+# so edits happen here and get back-ported to SKILL.md manually.
+
+triggers:
+  include:
+    # Chinese
+    - "AI客服"
+    - "智能客服"
+    - "搭建AI客服"
+    - "集成AI客服"
+    - "对话式AI"
+    - "语音助手 + 客服"          # both tokens must appear together
+    # English
+    - "AI customer service"
+    - "AI customer service agent"
+    - "conversational AI"
+    - "TRTC Conversational AI"
+    - "voice agent + customer service"   # both tokens must appear together
+
+  removed_from_pr:
+    # Removed — too broad, causes false positives on unrelated TRTC queries
+    - "intelligent Q&A"
+    - "智能问答"
+    - "build AI agent"     # no customer-service modifier → too wide

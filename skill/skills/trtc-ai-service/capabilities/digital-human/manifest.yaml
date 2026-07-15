@@ -1,0 +1,64 @@
+# digital-human capability self-describing manifest
+# Type: capability (reserved placeholder)
+#
+# Phase 2 goal: only declare manifest, provide "integration interface contract";
+# actual rendering / lip-sync / expression driving etc. deferred to future iterations.
+# After injection into skeleton, this package does no code injection, only exposes REST endpoint stubs.
+
+name: "digital-human"
+version: "0.1.0"
+type: "capability"
+description: "Digital human capability placeholder (rendering / lip-sync / expression driving). Only declares interface contract; rendering layer not enabled"
+
+dependencies:
+  - name: "conversation-core"
+    version: ">=1.0.0,<2.0.0"
+
+extensions:
+  - inject_at: "server.router_extension"
+    inline_code: |
+      # [digital-human] mount sub-router
+      from ._capability_loader import try_load_capability as _try_load_capability
+      _dh_router_mod = _try_load_capability("digital-human", "src/router.py")
+      if _dh_router_mod is not None and hasattr(_dh_router_mod, "router"):
+          app.include_router(
+              _dh_router_mod.router, prefix="/api/v1/digital-human", tags=["digital-human"]
+          )
+
+config:
+  enabled:
+    description: "Whether to enable (stub implementation, defaults to false to avoid accidental use)"
+    default: false
+  avatar_id:
+    description: "Default digital human avatar ID (used when integrating third-party rendering service)"
+    default: ""
+  lipsync_provider:
+    description: "Lip-sync provider placeholder"
+    default: "tencent-cloud-vmp"
+  expression_provider:
+    description: "Expression driving provider placeholder"
+    default: "internal-rule"
+
+endpoints:
+  - method: GET
+    path: /api/v1/digital-human/status
+    description: Returns placeholder status and future plans
+  - method: POST
+    path: /api/v1/digital-human/render
+    description: Rendering interface contract (currently returns 501 Not Implemented)
+
+integration:
+  mode: "manual"
+  fallback:
+    manual_api:
+      rest_endpoint: "/api/v1/digital-human"
+      sdk_packages: []
+
+security:
+  log_redaction:
+    enabled: true
+    patterns: ["api_key", "token"]
+
+acceptance:
+  - "Manifest passes manifest_resolver validation (dependencies / injection points valid)"
+  - "REST stub endpoints return explicit 'not implemented' marker"
