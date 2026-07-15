@@ -1,0 +1,21 @@
+{
+  "products": [
+    { "id": "p1", "name": "AirRun Pro Cushion Runner",     "price": 129, "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/2d87829d-c873-40b1-9ea7-b6f8e1068ea5-v1.png", "tag": "Hot",      "tagCls": "tag-hot" },
+    { "id": "p2", "name": "CloudWalk Lite Daily Sneaker",  "price": 79,  "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/4f3d823c-0224-44b8-899c-e0e257f8d7ad-v1.jpg", "tag": "In stock", "tagCls": "tag-instock" },
+    { "id": "p3", "name": "TrailEdge All-Terrain Hiker",   "price": 159, "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/837f061f-810d-4cb2-82df-b989147f7342-v1.jpg", "tag": "In stock", "tagCls": "tag-instock" },
+    { "id": "p4", "name": "CourtZero Tennis Trainer",      "price": 99,  "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/5ac97853-ff60-472a-a492-0e2d22b2589a-v1.jpg", "tag": "Low stock", "tagCls": "tag-low" },
+    { "id": "p5", "name": "UrbanFlex Slip-On",             "price": 65,  "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/67a42c48-3cb5-4b2d-9dfb-f2467dd90d0c-v1.jpg", "tag": "Hot",      "tagCls": "tag-hot" },
+    { "id": "p6", "name": "NightGlow Reflective Runner",   "price": 139, "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/2d87829d-c873-40b1-9ea7-b6f8e1068ea5-v1.png", "tag": "In stock", "tagCls": "tag-instock" },
+    { "id": "p7", "name": "BreezeMesh Summer Walker",      "price": 69,  "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/4f3d823c-0224-44b8-899c-e0e257f8d7ad-v1.jpg", "tag": "In stock", "tagCls": "tag-instock" },
+    { "id": "p8", "name": "PeakStorm Waterproof Boot",     "price": 179, "img": "https://venus-vedas-1258344701.cos-internal.ap-guangzhou.tencentcos.cn//formal/20260611/vedas-formal-pod-20260611105642-192b18/837f061f-810d-4cb2-82df-b989147f7342-v1.jpg", "tag": "Low stock", "tagCls": "tag-low" }
+  ],
+  "orders": [
+    { "id": "1122033", "date": "Jan 5, 2026",  "pidx": 0, "qty": 1, "status": "Delivered",  "cls": "b-delivered" },
+    { "id": "1122034", "date": "Jan 12, 2026", "pidx": 1, "qty": 2, "status": "Shipped",    "cls": "b-shipped" },
+    { "id": "1122035", "date": "Jan 18, 2026", "pidx": 2, "qty": 1, "status": "Processing", "cls": "b-processing" },
+    { "id": "1122036", "date": "Jan 22, 2026", "pidx": 3, "qty": 1, "status": "Delivered",  "cls": "b-delivered" },
+    { "id": "1122037", "date": "Feb 02, 2026", "pidx": 4, "qty": 3, "status": "Shipped",    "cls": "b-shipped" },
+    { "id": "1122038", "date": "Feb 08, 2026", "pidx": 5, "qty": 1, "status": "Processing", "cls": "b-processing" },
+    { "id": "1122039", "date": "Feb 14, 2026", "pidx": 6, "qty": 2, "status": "Delivered",  "cls": "b-delivered" }
+  ]
+}

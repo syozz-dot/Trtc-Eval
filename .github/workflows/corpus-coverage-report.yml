@@ -10,21 +10,23 @@ name: Corpus Coverage Report (offline)
 #   2. Token/tool 消耗对比 — Chat Path D vs docsbot 直答
 #   3. 按 product/intent 聚合 + 高频缺口 top-N
 #
+# Monorepo layout: all eval assets live under eval/.
+#
 # Developer workflow:
-#   python3 run_eval.py --ide claude-code --tags corpus \
-#           --out-dir ./eval-runs/corpus-smoke-<YYYY-MM-DD>
-#   git add eval-runs/corpus-smoke-*/
+#   python3 eval/run_eval.py --ide claude-code --tags corpus \
+#           --out-dir ./eval/eval-runs/corpus-smoke-<YYYY-MM-DD>
+#   git add eval/eval-runs/corpus-smoke-*/
 #   git commit + push + open PR — this workflow posts the report as a comment.
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'eval-runs/**/transcripts/**.jsonl'
-      - 'eval-runs/**/results.*.yaml'
-      - 'cases.json'
-      - 'bucket_classifier.py'
-      - 'coverage_report.py'
+      - 'eval/eval-runs/**/transcripts/**.jsonl'
+      - 'eval/eval-runs/**/results.*.yaml'
+      - 'eval/cases.json'
+      - 'eval/bucket_classifier.py'
+      - 'eval/coverage_report.py'
   workflow_dispatch:
     inputs:
       out_dir:
@@ -68,11 +70,11 @@ jobs:
             # Manual dispatch with an explicit dir
             DIRS="${{ inputs.out_dir }}"
           else
-            # PR diff mode: find every eval-runs/<dir>/ touched, then keep only corpus-smoke-*
+            # PR diff mode: find every eval/eval-runs/<dir>/ touched, keep corpus-smoke-* only
             TOUCHED=$(git diff --name-only --diff-filter=ACMR \
                         "origin/${GITHUB_BASE_REF}"...HEAD \
-                        -- 'eval-runs/**' \
-                      | grep -oE 'eval-runs/[^/]+' | sort -u | tr '\n' ' ' || true)
+                        -- 'eval/eval-runs/**' \
+                      | grep -oE 'eval/eval-runs/[^/]+' | sort -u | tr '\n' ' ' || true)
             DIRS=""
             for d in $TOUCHED; do
               case "$(basename "$d")" in
@@ -87,12 +89,12 @@ jobs:
       - name: Skip if nothing to report
         if: steps.discover.outputs.dirs == ''
         run: |
-          echo "::notice title=No corpus eval-run in PR::Nothing to report. Run 'python3 run_eval.py --ide claude-code --tags corpus --out-dir ./eval-runs/corpus-smoke-\$(date +%Y-%m-%d)' locally, then commit the eval-runs directory."
+          echo "::notice title=No corpus eval-run in PR::Nothing to report. Run 'python3 eval/run_eval.py --ide claude-code --tags corpus --out-dir ./eval/eval-runs/corpus-smoke-\$(date +%Y-%m-%d)' locally, then commit the eval/eval-runs directory."
           echo ""
           echo "How to produce a report:"
-          echo "  1. python3 run_eval.py --ide claude-code --tags corpus \\"
-          echo "         --out-dir ./eval-runs/corpus-smoke-\$(date +%Y-%m-%d)"
-          echo "  2. git add eval-runs/corpus-smoke-*/"
+          echo "  1. python3 eval/run_eval.py --ide claude-code --tags corpus \\"
+          echo "         --out-dir ./eval/eval-runs/corpus-smoke-\$(date +%Y-%m-%d)"
+          echo "  2. git add eval/eval-runs/corpus-smoke-*/"
           echo "  3. git commit + push"
 
       - name: Generate coverage reports
@@ -117,7 +119,7 @@ jobs:
             fi
             echo "── analyzing $d ──"
             # coverage_report.py 写入 <out-dir>/report.md + 打印 stdout 摘要
-            python3 coverage_report.py --out-dir "$d" || {
+            python3 eval/coverage_report.py --out-dir "$d" || {
               echo "::warning::coverage_report.py failed for $d — continuing"
               echo "" >> "$REPORT"
               echo "## \`$d\` — ⚠️ analysis failed" >> "$REPORT"
@@ -146,7 +148,7 @@ jobs:
           name: corpus-coverage-${{ github.event.pull_request.number || github.run_id }}
           path: |
             /tmp/corpus-report/comment.md
-            eval-runs/corpus-smoke-*/report.md
+            eval/eval-runs/corpus-smoke-*/report.md
           retention-days: 30
           if-no-files-found: warn
 

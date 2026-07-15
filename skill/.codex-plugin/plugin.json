@@ -1,0 +1,7 @@
+{
+  "name": "trtc-agent-skills",
+  "description": "TRTC AI Integration Assistant for Codex",
+  "author": { "name": "Tencent TRTC Team" },
+  "repository": "https://github.com/Tencent-RTC/agent-skills",
+  "skills": "./skills/"
+}

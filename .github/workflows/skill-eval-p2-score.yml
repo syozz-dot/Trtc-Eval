@@ -16,9 +16,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'eval-runs/**/results.*.yaml'
-      - 'cases.json'
-      - 'score.py'
+      - 'eval/eval-runs/**/results.*.yaml'
+      - 'eval/cases.json'
+      - 'eval/score.py'
 
 permissions:
   contents: read
@@ -44,9 +44,9 @@ jobs:
       - name: Discover results in this PR
         id: discover
         run: |
-          # Every results.*.yaml added or modified in eval-runs/**
+          # Every results.*.yaml added or modified in eval/eval-runs/**
           FILES=$(git diff --name-only --diff-filter=ACMR "origin/${GITHUB_BASE_REF}"...HEAD \
-                    -- 'eval-runs/**/results.*.yaml' | tr '\n' ' ')
+                    -- 'eval/eval-runs/**/results.*.yaml' | tr '\n' ' ')
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Discovered: $FILES"
 
@@ -79,10 +79,10 @@ jobs:
             BASELINE_ARG=""
             BASELINE_NOTE="_(no baseline found on main)_"
             git fetch origin main --depth=1 2>/dev/null || true
-            if git ls-tree -r origin/main --name-only 2>/dev/null | grep -qE "eval-runs/.*/summary\.${IDE}\.json$"; then
+            if git ls-tree -r origin/main --name-only 2>/dev/null | grep -qE "eval/eval-runs/.*/summary\.${IDE}\.json$"; then
               # Use the most recent one committed on main
               LATEST=$(git ls-tree -r origin/main --name-only \
-                        | grep -E "eval-runs/.*/summary\.${IDE}\.json$" \
+                        | grep -E "eval/eval-runs/.*/summary\.${IDE}\.json$" \
                         | sort | tail -1)
               git show "origin/main:$LATEST" > "/tmp/score-report/baseline.${IDE}.json" 2>/dev/null || true
               if [ -s "/tmp/score-report/baseline.${IDE}.json" ]; then
@@ -101,7 +101,7 @@ jobs:
               # workflow failure — we still want the markdown report posted
               # so a reviewer can see WHAT failed. The report's ✅/❌ callout
               # at the top makes the pass/fail state obvious.
-              python3 score.py "$f" --cases cases.json --format markdown $BASELINE_ARG || true
+              python3 eval/score.py "$f" --cases eval/cases.json --format markdown $BASELINE_ARG || true
               echo ""
             } >> "$REPORT"
           done

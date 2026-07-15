@@ -1,0 +1,18 @@
+{
+  "session_id": "test_session",
+  "opened_at": 1780905036.267712,
+  "closed_at": null,
+  "turns": [
+    {
+      "role": "user",
+      "text": "Can you check the delivery status of order A1234?",
+      "ts": 1780905036.26798
+    },
+    {
+      "role": "assistant",
+      "text": "Usually 3-5 business days.",
+      "ts": 1780905036.2682061
+    }
+  ],
+  "summary": null
+}

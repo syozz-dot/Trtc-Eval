@@ -1,0 +1,211 @@
+# knowledge-base capability self-describing manifest
+# Type: capability (optional install)
+
+name: "knowledge-base"
+version: "1.1.0"
+type: "capability"
+description: "FAQ retrieval + keyword matching (Phase 3 refactored to ports/adapters/core three-layer architecture)"
+
+# ---------------------------------------------------------------------------
+# Dependencies: only depends on the generic skeleton; no external databases
+# ---------------------------------------------------------------------------
+dependencies:
+  - name: "conversation-core"
+    version: ">=1.0.0,<2.0.0"
+
+# ---------------------------------------------------------------------------
+# Injection extensions into skeleton (maintains full Phase 2 compatibility; retriever.py is now a facade)
+# ---------------------------------------------------------------------------
+extensions:
+  # Prepend matched FAQ results to instructions before start_agent
+  - inject_at: "agent.before_start"
+    inline_code: |
+      # [knowledge-base] inject FAQ context if any user keywords present
+      if config is not None and getattr(config, "instructions", None):
+          from ._capability_loader import try_load_capability
+          _kb = try_load_capability("knowledge-base", "src/retriever.py")
+          if _kb is not None:
+              try:
+                  config.instructions = _kb.attach_faq_to_instructions(config.instructions)
+              except Exception as _kb_exc:  # noqa: BLE001
+                  logger.warning("knowledge-base FAQ injection failed: %s", _kb_exc)
+  # Mount sub-router after server.include_router
+  - inject_at: "server.router_extension"
+    inline_code: |
+      # [knowledge-base] mount sub-router
+      from ._capability_loader import try_load_capability as _try_load_capability
+      _kb_router_mod = _try_load_capability("knowledge-base", "src/router.py")
+      if _kb_router_mod is not None and hasattr(_kb_router_mod, "router"):
+          app.include_router(
+              _kb_router_mod.router, prefix="/api/v1/kb", tags=["knowledge-base"]
+          )
+
+# ---------------------------------------------------------------------------
+# Configuration interface
+# ---------------------------------------------------------------------------
+config:
+  data_file:
+    description: "FAQ data file path (JSON), used only by local_json adapter"
+    default: "capabilities/knowledge-base/data/faq.json"
+    env: "KB_DATA_FILE"
+  matcher:
+    description: "Matching strategy: keyword | tfidf | hybrid (local_json adapter defaults to tfidf)"
+    default: "tfidf"
+  top_k:
+    description: "Maximum number of FAQ entries to backfill"
+    default: 3
+    env: "KB_TOP_K"
+  min_score:
+    description: "Score threshold; entries below this threshold are not injected"
+    default: 0.1
+    env: "KB_MIN_SCORE"
+  adapter:
+    description: "Which KnowledgeBaseClient implementation to use: local_json | mock | default_rest | user_custom"
+    default: "local_json"
+    env: "KB_ADAPTER"
+
+# ---------------------------------------------------------------------------
+# API endpoints
+# ---------------------------------------------------------------------------
+endpoints:
+  - method: GET
+    path: /api/v1/kb/list
+    description: List all knowledge entries
+  - method: POST
+    path: /api/v1/kb/search
+    description: "Keyword search FAQ (body shape: {query, top_k?})"
+  - method: POST
+    path: /api/v1/kb/upsert
+    description: "Create or update entry (body shape: {id, question, answer, keywords[]})"
+  - method: DELETE
+    path: /api/v1/kb/{entry_id}
+    description: "Delete entry"
+  - method: POST
+    path: /api/v1/kb/reload
+    description: "Reload data from external source"
+  - method: GET
+    path: /api/v1/kb/stats
+    description: "Returns backend / entry count / load time (Phase 3 new)"
+
+# ---------------------------------------------------------------------------
+# Business contract (Phase 3 new; follows references/business-contract-spec.md v1.0)
+# ---------------------------------------------------------------------------
+business_contract:
+  port_class: "src.ports.kb_client.KnowledgeBaseClient"
+  default_adapter: "src.adapters.local_json.LocalJsonKbClient"
+  mock_adapter: "src.adapters.mock.MockKbClient"
+  customization_sop: "INTERFACE_ADAPT.md"
+  external_apis:
+    - name: faq.search
+      direction: outbound
+      method: POST
+      path: /faq/search
+      description: "Perform keyword search against external FAQ service"
+      request_schema:
+        query: string
+        top_k: int
+        min_score: float
+      response_schema:
+        hits:
+          - entry:
+              id: string
+              question: string
+              answer: string
+              keywords: string[]
+            score: float
+      adapter_slots:
+        - request.query
+        - request.top_k
+        - response.hits
+      auth:
+        type: bearer
+        location: header
+        name: Authorization
+      timeout_ms: 5000
+
+    - name: faq.list
+      direction: outbound
+      method: GET
+      path: /faq
+      description: "List all FAQ entries"
+      request_schema: {}
+      response_schema:
+        items:
+          - id: string
+            question: string
+            answer: string
+            keywords: string[]
+      adapter_slots:
+        - response.items
+      timeout_ms: 5000
+
+    - name: faq.upsert
+      direction: outbound
+      method: POST
+      path: /faq
+      description: "Create or update FAQ entry"
+      request_schema:
+        id: string
+        question: string
+        answer: string
+        keywords: string[]
+      response_schema:
+        id: string
+        question: string
+        answer: string
+        keywords: string[]
+      adapter_slots:
+        - request.id
+        - request.question
+        - request.answer
+        - request.keywords
+      timeout_ms: 5000
+
+    - name: faq.delete
+      direction: outbound
+      method: DELETE
+      path: /faq/{entry_id}
+      description: "Delete FAQ entry"
+      request_schema:
+        entry_id: string
+      response_schema:
+        deleted: string
+      adapter_slots:
+        - request.entry_id
+      timeout_ms: 3000
+
+# ---------------------------------------------------------------------------
+# Integration rules
+# ---------------------------------------------------------------------------
+integration:
+  mode: "auto"
+  auto_adapters:
+    - tech_stack: ["react", "vue", "angular"]
+      adapter: "frontend-spa"
+      description: "Inject an FAQ editor panel component into SPA"
+  fallback:
+    guided_templates:
+      - "../../auto_adapters/integration_templates/generic-frontend.md"
+    manual_api:
+      rest_endpoint: "/api/v1/kb"
+      sdk_packages: []
+
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
+security:
+  log_redaction:
+    enabled: true
+    patterns: ["api_key", "token", "credential", "authorization"]
+  input_validation:
+    max_query_length: 256
+    forbid_html_tags: true     # Strip HTML when writing entries to prevent injection
+  network:
+    enforce_https: true        # default_rest adapter enforces HTTPS for non-localhost
+
+acceptance:
+  - "Provide keyword/tfidf retrieval interface with minimal implementation"
+  - "API endpoints available immediately after skeleton startup"
+  - "Instructions injection does not modify skeleton files; solely via manifest.extensions"
+  - "Switching KB_ADAPTER requires no business code changes (local_json / mock / default_rest / user_custom)"
+  - "default_rest adapter rejects private network addresses (except localhost)"

@@ -1,0 +1,47 @@
+name: "node-backend"
+version: "1.0.0"
+target_role: "backend"
+tech_stack: ["express", "koa", "fastify"]
+description: "Node.js backend reverse proxy: transparently proxy ${ROUTE_PREFIX}/* to skeleton ${SKELETON_BASE_URL}${API_PREFIX}/*"
+
+templates:
+  express:
+    file: "express.js.tpl"
+    target_path: "routes/voice-agent.js"
+    install_hint: |
+      In Express app:
+        const voiceAgent = require('./routes/voice-agent');
+        app.use('${ROUTE_PREFIX}', voiceAgent);
+    package_dependencies:
+      - "express@^4.17.0"
+      - "node-fetch@^3.3.0"
+  koa:
+    file: "koa.js.tpl"
+    target_path: "routes/voice-agent.js"
+    install_hint: |
+      In Koa app:
+        const Router = require('@koa/router');
+        const proxy = require('./routes/voice-agent');
+        app.use(proxy.routes()).use(proxy.allowedMethods());
+    package_dependencies:
+      - "@koa/router@^12.0.0"
+      - "node-fetch@^3.3.0"
+  fastify:
+    file: "fastify.js.tpl"
+    target_path: "routes/voice-agent.js"
+    install_hint: |
+      In Fastify app:
+        const voiceAgent = require('./routes/voice-agent');
+        fastify.register(voiceAgent, { prefix: '${ROUTE_PREFIX}' });
+    package_dependencies:
+      - "fastify@^4.0.0"
+      - "node-fetch@^3.3.0"
+
+defaults:
+  SKELETON_BASE_URL: "http://localhost:3000"
+  API_PREFIX: "/api/v1"
+  ROUTE_PREFIX: "/voice-agent"
+
+security:
+  https_required: true
+  forbid_internal_ip: true   # Reverse proxy target defaults to rejecting private network ranges (10/192.168/172.16-31/9/11/21/30)

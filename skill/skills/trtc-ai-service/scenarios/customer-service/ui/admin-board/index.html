@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Agent Ticket Board</title>
+  <!-- Mounted under /static/admin/* via conversation-core StaticFiles -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="brand-mark">
+        <span class="brand-mark__logo" aria-hidden="true"></span>
+        <span class="brand-mark__name">Agent Ticket Board</span>
+        <span class="brand-mark__tag">demo</span>
+      </div>
+      <div class="topbar__meta">
+        <div class="metric" data-key="overall">
+          <span class="metric__label">Active agents</span>
+          <span class="metric__value" data-role="metric-agents">--</span>
+        </div>
+        <div class="metric" data-key="waiting">
+          <span class="metric__label">Waiting</span>
+          <span class="metric__value" data-role="metric-waiting">--</span>
+        </div>
+        <div class="metric" data-key="connected">
+          <span class="metric__label">In progress</span>
+          <span class="metric__value" data-role="metric-connected">--</span>
+        </div>
+        <button class="btn btn--ghost btn--small" type="button" id="btn-refresh">Refresh</button>
+        <label class="auto-toggle">
+          <input type="checkbox" id="chk-auto" checked />
+          <span>Auto refresh</span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left filter rail -->
+    <aside class="filter-rail">
+      <h2 class="filter-rail__title">Filter</h2>
+      <ul class="filter-list" id="filter-list">
+        <li><button class="filter-item is-active" data-status="" type="button">All</button></li>
+        <li><button class="filter-item" data-status="pending" type="button">
+          <span class="badge badge--warning"></span>Pending
+        </button></li>
+        <li><button class="filter-item" data-status="processing" type="button">
+          <span class="badge badge--info"></span>In progress
+        </button></li>
+        <li><button class="filter-item" data-status="closed" type="button">
+          <span class="badge badge--success"></span>Closed
+        </button></li>
+        <li><button class="filter-item" data-status="canceled" type="button">
+          <span class="badge badge--error"></span>Canceled
+        </button></li>
+        <li><button class="filter-item" data-status="timeout" type="button">
+          <span class="badge badge--error"></span>Timeout
+        </button></li>
+      </ul>
+
+      <h2 class="filter-rail__title">Tools</h2>
+      <ul class="filter-list">
+        <li>
+          <button class="filter-item" id="btn-seed" type="button">
+            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span>Insert test ticket</span>
+          </button>
+        </li>
+        <li><a class="filter-item" href="/" target="_blank" rel="noopener">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Customer widget</span>
+        </a></li>
+      </ul>
+    </aside>
+
+    <!-- Ticket table + detail drawer -->
+    <section class="content">
+      <div class="content__head">
+        <h1 class="content__title">Tickets</h1>
+        <p class="content__sub" id="list-summary">--</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="ticket-table" id="ticket-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Subject</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th class="ticket-table__col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-rows">
+            <tr class="empty-row" data-role="empty-row">
+              <td colspan="7">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Detail drawer -->
+    <aside class="drawer" id="drawer" aria-hidden="true" hidden>
+      <header class="drawer__head">
+        <h2 class="drawer__title">Ticket details</h2>
+        <button class="icon-btn" type="button" id="btn-close-drawer" aria-label="Close">
+          <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </header>
+      <div class="drawer__body" id="drawer-body">
+        <p class="drawer__placeholder">Select a ticket on the left to view details.</p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

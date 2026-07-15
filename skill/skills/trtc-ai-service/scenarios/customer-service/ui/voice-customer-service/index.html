@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice AI Customer Service · Conversational AI Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/tokens.css" />
+<link rel="stylesheet" href="/static/styles.css" />
+<!-- TRTC Web SDK v5 -->
+<script src="https://web.sdk.qcloud.com/trtc/webrtc/v5/dist/trtc.js"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { ink:'#1a1530', muted:'#6b6580', primary:'#9b7bf7', pink:'#f7b7d4', blue2:'#7ba8f7' },
+      fontFamily: { sans: ['Inter','SF Pro Display','system-ui','sans-serif'] }
+    } }
+  }
+</script>
+</head>
+<body class="font-sans text-ink overflow-x-hidden">
+
+<div class="bg-ambient min-h-screen w-full">
+  <div class="mx-auto" style="max-width:1440px">
+    <div class="px-4 md:px-8 py-3 md:py-4">
+
+      <!-- TOP BAR -->
+      <header class="px-1 md:px-2 py-1.5 mb-2 flex items-center gap-3 flex-wrap">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:var(--accent-grad)">
+            <i data-lucide="audio-waveform" class="w-3.5 h-3.5 text-white"></i>
+          </div>
+          <div class="leading-tight">
+            <div class="text-[13px] font-semibold tracking-tight">AI Customer Service</div>
+            <div class="text-[10px] text-muted">Powered by TRTC Conversational AI</div>
+          </div>
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+          <div id="conn-status" class="flex items-center gap-2 text-[11px] text-muted" data-connected="false">
+            <span id="conn-dot" class="status-dot" style="background:#c9c2d8"></span>
+            <span id="conn-text">Disconnected</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- MAIN GRID -->
+      <main class="grid grid-cols-1 lg:grid-cols-[300px,1fr] gap-0 items-stretch" style="height:620px; min-height:620px; max-height:620px;">
+
+        <!-- LEFT: KNOWLEDGE BASE -->
+        <aside class="glass rounded-l-2xl rounded-r-none p-4 flex flex-col h-full" style="min-height:0; overflow:hidden;">
+          <!-- Tabs -->
+          <div class="kb-tabs flex-shrink-0">
+            <button class="kb-tab active" data-tab="products">Products</button>
+            <button class="kb-tab" data-tab="orders">Orders</button>
+          </div>
+
+          <!-- Search -->
+          <div class="kb-search mt-3 flex-shrink-0">
+            <i data-lucide="search" class="w-4 h-4 text-muted"></i>
+            <input id="kb-search" type="text" placeholder="Search…" />
+          </div>
+
+          <!-- Scrollable list area -->
+          <div class="kb-list mt-3 flex-1 overflow-y-auto pr-1 no-scrollbar" style="min-height:0;">
+            <div id="tab-products" class="space-y-2.5"></div>
+            <div id="tab-orders" class="space-y-2.5 hidden"></div>
+          </div>
+        </aside>
+
+        <!-- RIGHT: VOICE CONSOLE -->
+        <section id="right-console" class="glass rounded-r-2xl rounded-l-none p-5 md:p-7 flex flex-col relative h-full" style="min-height:0; overflow:hidden;" data-view="default">
+
+          <!-- Sub metrics -->
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <span class="pill"><i data-lucide="radio" class="w-3 h-3"></i> Real-time Voice</span>
+              <span class="pill"><i data-lucide="cpu" class="w-3 h-3"></i> Conversational AI</span>
+            </div>
+          </div>
+
+          <!-- Toast for blocked card click -->
+          <div id="kb-toast" class="kb-toast"></div>
+
+          <!-- COMPACT BAR (shown when viewing item detail) -->
+          <div id="compact-bar" class="compact-bar">
+            <button id="compact-back" class="compact-back" title="Back">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <div class="compact-pill">
+              <div class="compact-orb"><span class="co-shine"></span></div>
+              <div class="compact-wave">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- DETAIL VIEW (product / order) -->
+          <div id="detail-view" class="detail-view">
+            <div id="detail-question" class="detail-question" style="font-size:14px;color:#6b5b95;font-weight:500;text-align:center;padding:0 12px;"></div>
+            <div id="detail-card" class="detail-card-wrap"></div>
+          </div>
+
+          <!-- DOCK for detail view -->
+          <div id="dock-detail" class="dock-area dock-detail-mode flex-shrink-0" data-state="expanded" style="display:none">
+            <div class="dock-expanded" style="opacity:1;pointer-events:auto;transform:translateX(-50%) scale(1);width:auto;position:relative;left:auto;transform:none;">
+              <button id="btn-mic-detail" class="dock-btn dock-mic" title="Mute mic">
+                <i data-lucide="mic" class="w-5 h-5"></i>
+              </button>
+              <button id="btn-agent-detail" class="dock-btn dock-agent" title="Human Support">
+                <i data-lucide="headphones" class="w-4 h-4"></i>
+                <span>Human Support</span>
+              </button>
+              <button id="btn-hang-detail" class="dock-btn dock-hang" title="Hang up">
+                <i data-lucide="phone-off" class="w-5 h-5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- HERO ORB AREA -->
+          <div class="default-view flex-1 flex flex-col items-center justify-center" style="min-height:0;overflow:hidden;">
+            <div class="orb-wrap idle">
+              <div class="orb-halo"></div>
+              <div class="orb-halo orb-halo-2"></div>
+              <div class="orb-halo orb-halo-3"></div>
+              <div class="orb">
+                <div class="orb-shine"></div>
+                <div class="orb-core"></div>
+              </div>
+            </div>
+
+            <!-- Handoff queue progress bar -->
+            <div id="queue-progress-wrap" class="mt-4 w-full max-w-sm">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs text-muted">Connecting to agent...</span>
+                <span id="queue-timer" class="text-xs font-semibold text-primary">0:00</span>
+              </div>
+              <div class="w-full h-1.5 bg-white/40 rounded-full overflow-hidden">
+                <div id="queue-bar" class="h-full rounded-full transition-all duration-300" style="width:0%; background:var(--accent-grad);"></div>
+              </div>
+            </div>
+
+            <div id="ai-state" class="mt-4 text-lg md:text-xl font-semibold tracking-tight">Ready to start conversation</div>
+            <div id="ai-substate" class="text-xs text-muted mt-1">Press <span class="kbd">Start</span> below to begin a real-time voice session</div>
+
+            <!-- BIG WAVE -->
+            <div id="wave" class="wave-big idle mt-4">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+
+            <!-- secondary control (hidden until started) -->
+            <div class="mt-4 flex items-center justify-center gap-3">
+              <button id="ctl-chat" class="ctl-pill ctl-ghost" style="display:none">
+                <i data-lucide="message-square" class="w-4 h-4"></i>
+                <span>Open chat</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- DOCK (collapsed = single Start; expanded = mic / human / hang) -->
+          <div id="dock" class="dock-area flex-shrink-0" data-state="collapsed">
+            <button id="btn-start" class="dock-start-fab" title="Start">
+              <i data-lucide="play" class="w-5 h-5"></i>
+            </button>
+            <div class="dock-expanded" aria-hidden="true">
+              <button id="btn-mic" class="dock-btn dock-mic" title="Mute mic">
+                <i data-lucide="mic" class="w-5 h-5"></i>
+              </button>
+              <button id="btn-agent" class="dock-btn dock-agent" title="Human Support">
+                <i data-lucide="headphones" class="w-4 h-4"></i>
+                <span>Human Support</span>
+              </button>
+              <button id="btn-hang" class="dock-btn dock-hang" title="Hang up">
+                <i data-lucide="phone-off" class="w-5 h-5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- IM DRAWER -->
+          <div id="im-drawer" class="im-drawer">
+            <div class="im-head">
+              <div class="flex items-center gap-2">
+                <i data-lucide="message-square" class="w-4 h-4 text-primary"></i>
+                <span class="text-sm font-semibold">Text Chat (auxiliary)</span>
+              </div>
+              <button id="im-close" class="im-close-btn"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div id="chat" class="chat px-3 py-3 space-y-3"></div>
+            <div class="im-input">
+              <i data-lucide="message-square" class="w-4 h-4 text-muted ml-3"></i>
+              <input id="chat-input" type="text" placeholder="Type if you can't speak…"
+                class="flex-1 bg-transparent outline-none py-2.5 text-sm placeholder:text-muted/70" />
+              <button id="send-btn" class="send-btn"><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="text-center text-[11px] text-muted mt-6 pb-2">Voice AI Customer Service · TRTC Conversational AI Prototype</footer>
+    </div>
+  </div>
+</div>
+
+<!-- Rating card (post-call CSAT) -->
+<div id="rating-overlay" class="rating-overlay" hidden>
+  <div class="rating-card glass">
+    <div class="rating-icon"><i data-lucide="star" class="w-5 h-5"></i></div>
+    <div class="rating-title">How was your experience?</div>
+    <div class="rating-sub">Your feedback helps us improve our service</div>
+    <div class="rating-stars" id="rating-stars">
+      <button type="button" class="star-btn" data-val="1" aria-label="1 star"><i data-lucide="star" class="w-7 h-7"></i></button>
+      <button type="button" class="star-btn" data-val="2" aria-label="2 stars"><i data-lucide="star" class="w-7 h-7"></i></button>
+      <button type="button" class="star-btn" data-val="3" aria-label="3 stars"><i data-lucide="star" class="w-7 h-7"></i></button>
+      <button type="button" class="star-btn" data-val="4" aria-label="4 stars"><i data-lucide="star" class="w-7 h-7"></i></button>
+      <button type="button" class="star-btn" data-val="5" aria-label="5 stars"><i data-lucide="star" class="w-7 h-7"></i></button>
+    </div>
+    <textarea id="rating-comment" class="rating-comment" placeholder="Tell us more (optional)…" rows="3"></textarea>
+    <div class="rating-actions">
+      <button type="button" id="rating-skip" class="dock-btn">Skip</button>
+      <button type="button" id="rating-submit" class="ctl-pill" disabled>Submit</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/data.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

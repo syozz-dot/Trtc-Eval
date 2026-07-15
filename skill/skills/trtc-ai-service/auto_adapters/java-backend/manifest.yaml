@@ -1,0 +1,30 @@
+name: "java-backend"
+version: "1.0.0"
+target_role: "backend"
+tech_stack: ["spring-boot", "quarkus"]
+description: "Java backend Filter: forward requests to skeleton process"
+
+templates:
+  spring-boot:
+    file: "springboot/VoiceAgentFilter.java.tpl"
+    target_path: "src/main/java/com/example/voiceagent/VoiceAgentFilter.java"
+    install_hint: |
+      Filter already includes @Component; Spring Boot auto-scans it.
+      To customize the path prefix, modify the PATH_PREFIX constant or inject via application.yml.
+    package_dependencies:
+      - "org.springframework.boot:spring-boot-starter-web"
+  quarkus:
+    file: "quarkus/VoiceAgentFilter.java.tpl"
+    target_path: "src/main/java/com/example/voiceagent/VoiceAgentFilter.java"
+    install_hint: |
+      Filter already includes @Provider; place the file in any package path scanned by Quarkus.
+    package_dependencies:
+      - "io.quarkus:quarkus-rest-client-reactive"
+
+defaults:
+  SKELETON_BASE_URL: "http://localhost:3000"
+  API_PREFIX: "/api/v1"
+  ROUTE_PREFIX: "/voice-agent"
+
+security:
+  https_required: true

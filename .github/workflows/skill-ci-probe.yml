@@ -83,7 +83,7 @@ jobs:
         run: |
           mkdir -p /tmp/install-target
           cd /tmp/install-target
-          npx -y "$NPX_TARGET" add --ide all --no-report || true
+          node "$GITHUB_WORKSPACE/skill/bin/cli.js" add --ide all --no-report || true
 
       - name: Try API-key auth if secret is set
         working-directory: /tmp/install-target
@@ -97,10 +97,10 @@ jobs:
                 echo "::warning::CURSOR_API_KEY not set — cannot test API-key auth"
                 exit 0
               fi
-              python3 "$GITHUB_WORKSPACE/run_eval.py" \
+              python3 "$GITHUB_WORKSPACE/eval/run_eval.py" \
                 --ide cursor \
                 --working-dir /tmp/install-target \
-                --cases "$GITHUB_WORKSPACE/cases.json" \
+                --cases "$GITHUB_WORKSPACE/eval/cases.json" \
                 --probe || true
               ;;
             codebuddy)
@@ -108,10 +108,10 @@ jobs:
                 echo "::warning::CODEBUDDY_API_KEY not set — cannot test API-key auth"
                 exit 0
               fi
-              python3 "$GITHUB_WORKSPACE/run_eval.py" \
+              python3 "$GITHUB_WORKSPACE/eval/run_eval.py" \
                 --ide codebuddy \
                 --working-dir /tmp/install-target \
-                --cases "$GITHUB_WORKSPACE/cases.json" \
+                --cases "$GITHUB_WORKSPACE/eval/cases.json" \
                 --probe || true
               ;;
           esac

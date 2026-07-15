@@ -6,24 +6,26 @@ __pycache__/
 # Eval runs — results.yaml + summary.json ARE committed (CI scores them);
 # transcripts and their turns are opt-in (may contain sensitive prompts/output).
 # If you want to commit them, remove the ignore rule below for that run dir.
-eval-runs/**/transcripts/
+eval/eval-runs/**/transcripts/
 
 # Corpus smoke transcripts are opt-in whitelisted — the 8 seed cases are
 # generic product questions (no PII), and coverage_report.py needs them
 # as input for bucket_classifier analysis in CI.
-!eval-runs/corpus-smoke-*/transcripts/
-!eval-runs/corpus-smoke-*/transcripts/**
+!eval/eval-runs/corpus-smoke-*/transcripts/
+!eval/eval-runs/corpus-smoke-*/transcripts/**
 
 # Golden fixtures for parser regression — DO commit these
-!fixtures/
-!fixtures/**
+!eval/fixtures/
+!eval/fixtures/**
 
 # macOS
 .DS_Store
 
-# Locally-installed skill target (from npx add for testing)
-.claude/
-.cursor/
-.codebuddy/
-.codex/
-.agents/
+# Locally-installed skill target (from `node skill/bin/cli.js add` for testing).
+# Leading slash: only ignore at repo ROOT, NOT skill/.claude/ etc. which are
+# the actual authored skill source (must be tracked in the monorepo).
+/.claude/
+/.cursor/
+/.codebuddy/
+/.codex/
+/.agents/

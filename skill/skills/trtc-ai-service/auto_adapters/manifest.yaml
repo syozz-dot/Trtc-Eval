@@ -1,0 +1,43 @@
+# auto_adapters index manifest
+# For add-capability CLI / Agent to parse adapter-to-tech-stack mappings.
+
+version: "1.0.0"
+description: "Tech stack decoupling adapter component library, Phase 2 initial coverage of 4 adapter types / 12 tech stacks"
+
+# Rendering variable format ${VAR}, replaced by CLI before writing
+default_variables:
+  SKELETON_BASE_URL: "http://localhost:3000"
+  API_PREFIX: "/api/v1"
+  COMPONENT_NAME: "VoiceAgent"
+  ROUTE_PREFIX: "/voice-agent"
+
+adapters:
+  - name: "frontend-spa"
+    path: "frontend-spa"
+    tech_stack: ["react", "vue", "angular", "next"]
+    description: "Frontend SPA adapter, generates join-room component and connects to skeleton /api/v1/*"
+    target_role: "frontend"
+
+  - name: "node-backend"
+    path: "node-backend"
+    tech_stack: ["express", "koa", "fastify"]
+    description: "Node.js backend adapter, generates reverse proxy middleware"
+    target_role: "backend"
+
+  - name: "java-backend"
+    path: "java-backend"
+    tech_stack: ["spring-boot", "quarkus"]
+    description: "Java backend adapter, generates Filter / Quarkus Filter"
+    target_role: "backend"
+
+  - name: "python-backend"
+    path: "python-backend"
+    tech_stack: ["flask", "fastapi", "django"]
+    description: "Python backend adapter, generates decorators / sub-router mounting"
+    target_role: "backend"
+
+# General templates referenced by three-level degrader
+fallback_templates:
+  guided_frontend: "integration_templates/generic-frontend.md"
+  guided_backend: "integration_templates/generic-backend.md"
+  manual_rest_api: "integration_templates/generic-rest-api.md"

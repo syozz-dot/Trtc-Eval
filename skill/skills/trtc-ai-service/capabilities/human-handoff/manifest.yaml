@@ -1,0 +1,227 @@
+# human-handoff capability self-describing manifest
+# Type: capability (optional install)
+
+name: "human-handoff"
+version: "1.1.0"
+type: "capability"
+description: "Semantic trigger for human handoff + ticket lifecycle (Phase 3 refactored to ports/adapters/core three-layer architecture)"
+
+dependencies:
+  - name: "conversation-core"
+    version: ">=1.0.0,<2.0.0"
+
+# ---------------------------------------------------------------------------
+# Injection points (maintains full Phase 2 compatibility; trigger.py / queue.py are now facades)
+# ---------------------------------------------------------------------------
+extensions:
+  # Detect whether to trigger "handoff" before text injection; if matched, route to human channel
+  - inject_at: "agent.before_push_text"
+    inline_code: |
+      # [human-handoff] semantic trigger detection
+      from ._capability_loader import try_load_capability
+      _hh_trigger = try_load_capability("human-handoff", "src/trigger.py")
+      if _hh_trigger is not None:
+          _hand = _hh_trigger.maybe_handoff(session_id, text)
+          if _hand is not None:
+              text = _hand   # Replace original text with queue/connect messaging to prevent LLM self-answering
+  # Release queue slot after agent stops
+  - inject_at: "agent.after_start"
+    inline_code: |
+      # [human-handoff] register session for handoff state machine
+      from ._capability_loader import try_load_capability
+      _hh_queue = try_load_capability("human-handoff", "src/queue.py")
+      if _hh_queue is not None:
+          _hh_queue.attach_session(session_id, info=info if 'info' in locals() else None)
+  - inject_at: "server.router_extension"
+    inline_code: |
+      # [human-handoff] mount sub-router
+      from ._capability_loader import try_load_capability as _try_load_capability
+      _hh_router_mod = _try_load_capability("human-handoff", "src/router.py")
+      if _hh_router_mod is not None and hasattr(_hh_router_mod, "router"):
+          app.include_router(
+              _hh_router_mod.router, prefix="/api/v1/handoff", tags=["human-handoff"]
+          )
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+config:
+  triggers:
+    description: "Strong trigger keyword list (exact match / case-insensitive)"
+    default:
+      - "talk to agent"
+      - "human support"
+      - "real person"
+      - "talk to agent"
+      - "speak to a human"
+  intent_keywords:
+    description: "Weak trigger keywords (subtracted from negative context)"
+    default:
+      - "complain"
+      - "manager"
+      - "supervisor"
+      - "not working"
+  queue_capacity:
+    description: "Local queue capacity (effective only for local_queue / mock adapter)"
+    default: 50
+  agent_pool_size:
+    description: "Number of available agents (auto-connect when >0)"
+    default: 1
+  estimated_wait_seconds_per_slot:
+    default: 30
+  retention_seconds:
+    description: "Retention duration for completed sessions (used for summary queries)"
+    default: 600
+  adapter:
+    description: "Which HandoffClient implementation to use: local_queue | mock | default_rest | user_custom"
+    default: "local_queue"
+    env: "HH_ADAPTER"
+
+# ---------------------------------------------------------------------------
+# API endpoints
+# ---------------------------------------------------------------------------
+endpoints:
+  - method: GET
+    path: /api/v1/handoff/status
+    description: Query overall queue status
+  - method: GET
+    path: /api/v1/handoff/{session_id}
+    description: Query handoff status for a single session (legacy field format, backward compatible)
+  - method: POST
+    path: /api/v1/handoff/request
+    description: "Explicit handoff request submission (body shape: {session_id, reason?})"
+  - method: POST
+    path: /api/v1/handoff/connect
+    description: "Simulate agent connection (body shape: {session_id, agent_id})"
+  - method: POST
+    path: /api/v1/handoff/cancel
+    description: "Cancel queue (body shape: {session_id})"
+  # ----- Phase 3 new: Ticket agent dashboard endpoints -----
+  - method: GET
+    path: /api/v1/handoff/admin/tickets
+    description: "Ticket list (supports ?status=&limit= filtering)"
+  - method: GET
+    path: /api/v1/handoff/admin/tickets/{ticket_id}
+    description: "Ticket details"
+  - method: POST
+    path: /api/v1/handoff/admin/tickets/{ticket_id}/status
+    description: "Agent manually switches ticket status (pending|processing|closed|canceled|timeout)"
+
+# ---------------------------------------------------------------------------
+# Business contract (Phase 3 new; follows references/business-contract-spec.md v1.0)
+# ---------------------------------------------------------------------------
+business_contract:
+  port_class: "src.ports.handoff_client.HandoffClient"
+  default_adapter: "src.adapters.local_queue.LocalQueueHandoffClient"
+  mock_adapter: "src.adapters.mock.MockHandoffClient"
+  customization_sop: "INTERFACE_ADAPT.md"
+  external_apis:
+    - name: ticket.create
+      direction: outbound
+      method: POST
+      path: /tickets
+      description: "Create a new ticket in the ticketing system when user triggers handoff"
+      request_schema:
+        user_id: string
+        subject: string
+        description: string
+        priority: enum[low, normal, high, urgent]
+        transcript: string[]
+      response_schema:
+        ticket_id: string
+        queue_position: int
+        eta_seconds: int
+      adapter_slots:
+        - request.subject
+        - request.priority
+        - response.ticket_id
+        - response.queue_position
+        - response.eta_seconds
+      auth:
+        type: bearer
+        location: header
+        name: Authorization
+      timeout_ms: 5000
+
+    - name: ticket.status_query
+      direction: outbound
+      method: GET
+      path: /tickets/{ticket_id}
+      description: "Poll ticket status for queue progress updates"
+      request_schema:
+        ticket_id: string
+      response_schema:
+        ticket_id: string
+        status: enum[pending, processing, closed, canceled]
+        agent_id: string
+        updated_at: int
+      adapter_slots:
+        - response.status
+        - response.agent_id
+      timeout_ms: 3000
+
+    - name: ticket.cancel
+      direction: outbound
+      method: POST
+      path: /tickets/{ticket_id}/cancel
+      description: "Notify ticketing system when user cancels handoff"
+      request_schema:
+        ticket_id: string
+        reason: string
+      response_schema:
+        ticket_id: string
+        canceled: bool
+      adapter_slots:
+        - request.reason
+      timeout_ms: 3000
+
+    - name: ticket.status_callback
+      direction: inbound
+      method: POST
+      path: /api/v1/handoff/callback/ticket-status
+      description: "Callback from ticketing system to notify status changes (optional; when disabled, status_query polling is used instead)"
+      request_schema:
+        ticket_id: string
+        status: enum[pending, processing, closed, canceled]
+        agent_id: string
+      response_schema:
+        code: int
+        message: string
+      adapter_slots:
+        - request.status
+        - request.agent_id
+
+# ---------------------------------------------------------------------------
+# Integration
+# ---------------------------------------------------------------------------
+integration:
+  mode: "auto"
+  auto_adapters:
+    - tech_stack: ["react", "vue", "angular"]
+      adapter: "frontend-spa"
+      description: "Append queue status indicator component to SPA"
+    - tech_stack: ["express", "koa", "fastify", "next"]
+      adapter: "node-backend"
+    - tech_stack: ["flask", "fastapi", "django"]
+      adapter: "python-backend"
+    - tech_stack: ["spring-boot", "quarkus"]
+      adapter: "java-backend"
+  fallback:
+    guided_templates:
+      - "../../auto_adapters/integration_templates/generic-frontend.md"
+    manual_api:
+      rest_endpoint: "/api/v1/handoff"
+
+security:
+  log_redaction:
+    enabled: true
+    patterns: ["phone", "mobile", "user_id", "credential", "authorization"]
+  network:
+    enforce_https: true        # default_rest adapter enforces HTTPS for non-localhost
+
+acceptance:
+  - "Keyword match immediately enters ticket flow, status pollable by frontend"
+  - "Connects instantly when agent pool > 0; returns estimated wait time when = 0"
+  - "Correctly releases slot when session is canceled / connected"
+  - "Switching HH_ADAPTER requires no business code changes (local_queue / mock / default_rest / user_custom)"
+  - "default_rest adapter rejects private network addresses (except localhost)"

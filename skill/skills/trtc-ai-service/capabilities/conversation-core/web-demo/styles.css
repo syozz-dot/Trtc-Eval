@@ -1,0 +1,136 @@
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --green: #3fb950;
+  --red: #f85149;
+  --yellow: #d29922;
+  --accent: #2f81f7;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------- Status bar ---------------- */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.indicators { display: flex; align-items: center; gap: 12px; }
+.indicator {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.03);
+  padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.led {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
+}
+.led-unknown { background: var(--muted); color: var(--muted); }
+.led-ok      { background: var(--green); color: var(--green); }
+.led-fail    { background: var(--red);   color: var(--red); }
+.led-pending { background: var(--yellow); color: var(--yellow); animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+.indicator .latency { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
+
+/* ---------------- Conversation ---------------- */
+main { flex: 1; overflow: auto; padding: 24px; }
+.conversation { max-width: 880px; margin: 0 auto; }
+.placeholder {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  color: var(--muted);
+}
+.placeholder h1 { color: var(--text); margin-top: 0; }
+.hint-list { line-height: 1.8; padding-left: 20px; }
+.hint-list em { color: var(--accent); font-style: normal; }
+
+.bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font-size: 14px;
+}
+.bubble.user {
+  background: var(--accent);
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+.bubble.agent {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+/* ---------------- Control bar ---------------- */
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity .15s, background .15s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); }
+.btn-danger  { background: var(--red); border-color: var(--red); }
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,.05); }
+.btn-active { background: var(--red); border-color: var(--red); color: #fff; }
+
+.text-input-group { flex: 1; display: flex; gap: 8px; min-width: 240px; }
+.text-input-group input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+.text-input-group input:focus { border-color: var(--accent); outline: none; }
+
+.agent-status { font-size: 12px; color: var(--muted); }
+.agent-state {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  text-transform: lowercase;
+}
+.agent-state-idle      { color: var(--muted); }
+.agent-state-listening { color: var(--green); border-color: var(--green); }
+.agent-state-thinking  { color: var(--yellow); border-color: var(--yellow); animation: blink 1.2s infinite; }
+.agent-state-speaking  { color: var(--accent); border-color: var(--accent); }

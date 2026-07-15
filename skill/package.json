@@ -1,0 +1,44 @@
+{
+  "name": "@tencent-rtc/trtc-agent-skills",
+  "version": "0.1.7",
+  "description": "Installer for the TRTC Agent Skills suite (Chat, Call, RTC Engine, Live, Conference) + knowledge base, with one-command MCP setup for Claude Code / Cursor / CodeBuddy / Codex.",
+  "bin": {
+    "trtc-agent-skills": "bin/cli.js"
+  },
+  "scripts": {
+    "version": "node scripts/update-version.js",
+    "release": "npm publish --access public"
+  },
+  "files": [
+    "bin/",
+    "skills/",
+    "knowledge-base/",
+    "hooks/",
+    "ai-instructions/",
+    ".cursor/rules/",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "CODEBUDDY.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "keywords": [
+    "trtc",
+    "real-time-communication",
+    "video-conference",
+    "live-streaming",
+    "chat",
+    "webrtc",
+    "sdk-integration",
+    "ai-skill",
+    "mcp"
+  ],
+  "author": {
+    "name": "Tencent TRTC Team"
+  },
+  "homepage": "https://trtc.io",
+  "repository": "https://git.woa.com/jackyixue/trtc-ai-integration",
+  "license": "MIT"
+}

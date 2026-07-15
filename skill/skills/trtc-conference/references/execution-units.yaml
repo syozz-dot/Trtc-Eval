@@ -1,0 +1,58 @@
+# Delivery-unit execution plan.
+#
+# This file is the visible source of truth for automatic slice grouping when
+# `.trtc-session.yaml` has `execution_granularity: unit`.
+#
+# Rules:
+# - Grouping is scenario-scoped.
+# - Grouping may only batch slices already present in `confirmed_plan`.
+# - Slices omitted by the customer's selected scope remain omitted.
+# - Slices not listed in a matched unit stay as single-slice execution steps.
+# - If a scenario is absent here, unit mode does not auto-group it.
+
+version: 1
+scenarios:
+  general-conference:
+    delivery_units:
+      - id: foundation
+        title: 会议基础链路
+        slices:
+          - conference/login-auth
+          - conference/room-lifecycle
+
+      - id: prejoin
+        title: 会前准备
+        slices:
+          - conference/prejoin-check
+          - conference/device-control
+
+      - id: media
+        title: 音视频与布局
+        slices:
+          - conference/participant-list
+          - conference/video-layout
+          - conference/network-quality
+
+      - id: collaboration
+        title: 会中协作
+        slices:
+          - conference/screen-share
+          - conference/room-chat
+
+      - id: moderation
+        title: 成员与会控
+        slices:
+          - conference/participant-management
+          - conference/room-call
+
+      - id: schedule
+        title: 预约会议
+        slices:
+          - conference/room-lifecycle
+          - conference/room-schedule
+
+      - id: effects
+        title: 视频增强
+        slices:
+          - conference/beauty-effects
+          - conference/virtual-background

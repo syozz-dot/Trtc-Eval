@@ -1,0 +1,41 @@
+# TRTC AI Integration - Eval Tool
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Eval runs (never commit — may contain PII in logs)
+.claude/eval-runs/
+
+# Template cache (cloned by bootstrap.sh into the trtc-eval skill dir)
+.claude/skills/trtc-eval/.cache/
+.claude/skills/trtc-eval/templates/ios-demo/
+.claude/skills/trtc-eval/templates/android-demo/
+.claude/skills/trtc-eval/templates/web-demo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Skill-level config (contains real TRTC test credentials; example is checked in)
+.claude/skills/trtc-eval/config.json
+
+# TRTC onboarding session state
+.trtc-session.yaml
+.trtc-apply-evidence/
+.claude/settings.local.json
+
+# Internal architecture / design notes — never push upstream
+internal-docs/
