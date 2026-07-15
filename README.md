@@ -11,6 +11,7 @@
 | skill 装得对吗？ | **P1** — 装齐检查 | 4 家 IDE 目录里的资产文件是否全在正确位置 |
 | skill 用得对吗？ | **P2** — 行为评测 | 跑真实 prompt，观察路由 / hooks / 工具调用是否符合预期 |
 | skill 内部契约守住了吗？ | **P3** — 白盒 trace（可选）| 读 `~/.cache/trtc-traces/` 里的事件流，断言"AI 真读了某文件 / hook 没 fail_open" |
+| AI 回答有覆盖缺口吗？ | **Corpus 覆盖分析** — P2 补充 | 用真实用户 prompt seed 跑一遍，看回答的数据源和暗雷（bucket A/B/C/D/E?） |
 
 ---
 
@@ -42,17 +43,22 @@
 
 看 [`SOP.md · 附录 A · Phase 3`](./SOP.md#附录-a--phase-3-白盒-trace-评测)。用 `python3 run_eval.py --with-trace ...` 激活。
 
+### 📈 我想看 AI 回答的能力覆盖缺口
+
+看 [`SOP.md · Corpus 覆盖分析`](./SOP.md#附录-b--corpus-覆盖分析)。跑 `--tags corpus` 挑 8 条真实用户 seed，`coverage_report.py` 出人视角报告（bucket A/B/C/D/E? + 数据源 + token 消耗）。
+
 ---
 
 ## CI 结构
 
-4 份 workflow，**没有一份需要 API key**：
+5 份 workflow，**没有一份需要 API key**：
 
 | Workflow | 触发 | 干什么 |
 |---|---|---|
 | `skill-check-install.yml` | 每 PR · 每天 03:07 UTC | P1 装齐检查（4 IDE 并行） |
 | `parser-regression.yml` | 每 PR | 8 fixture 回归 + 敏感信息扫描 |
 | `skill-eval-p2-score.yml` | PR 里 `eval-runs/**/results.*.yaml` 变更 | 打分 → 表格化报告贴 PR 评论 + Actions Job Summary |
+| `corpus-coverage-report.yml` | PR 里 `eval-runs/**/transcripts/**.jsonl` 或 `results.*.yaml` 变更 | 免费聚合 bucket 分布 + token 消耗 → sticky comment（人视角报告） |
 | `skill-ci-probe.yml` | 仅手动 | 探测 IDE CLI 认证方式（研究性质） |
 
 **跨仓联动**：agent-skills 发新版时会 dispatch 到本仓的 P1（配置在 agent-skills 那边）。此外本仓 P1 每天 03:07 UTC 自动追踪 `@latest` 变化，双保险。
@@ -79,6 +85,12 @@ python3 run_eval.py --ide claude-code --tags smoke --out-dir eval-runs/$(date +%
 
 # P2 全量（10 case，~15 分钟）
 python3 run_eval.py --ide claude-code
+
+# Corpus 覆盖分析：跑 8 条真实用户 seed prompt
+python3 run_eval.py --ide claude-code --tags corpus --out-dir eval-runs/corpus-smoke-$(date +%Y-%m-%d)
+
+# 从 corpus eval-run 生成人视角报告（免费、秒级）
+python3 coverage_report.py --out-dir eval-runs/corpus-smoke-$(date +%Y-%m-%d)
 
 # 打分（本地 CLI 格式）
 python3 score.py eval-runs/<date>/results.claude-code.yaml

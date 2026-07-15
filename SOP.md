@@ -8,6 +8,8 @@
 - **[4. 维护 / 重装场景](#4-维护--重装场景)** — 替换 fixture、加 case、加 IDE、重装 hook、敏感命中处置
 - **[5. 自动触发结构](#5-自动触发结构)** — cron / release-dispatch 怎么工作、如何调试
 - **[6. 术语与快速参考](#6-术语与快速参考)**
+- **[附录 A · Phase 3 白盒 trace 评测](#附录-a--phase-3-白盒-trace-评测)** — silent failure 检测
+- **[附录 B · Corpus 覆盖分析](#附录-b--corpus-覆盖分析)** — 用真实用户 seed 提问，看回答能力缺口
 
 ---
 
@@ -391,6 +393,78 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml
 
 ---
 
+## 附录 B · Corpus 覆盖分析
+
+**目的**：P2 只回答 "skill/工具**触发**得对不对"；本层回答 "AI 的**回答内容**有没有覆盖用户问题、走的是什么数据源"。**同一份 transcripts，抽两个 orthogonal 信号**。
+
+### B.1 什么时候用
+
+- 想知道**真实用户提问**里哪些主题当前 skill 答不上（能力缺口）
+- 想识别"技术触发全对了但答案没内容"的暗雷（如：走了 docsbot 拿到答案，但本地文档缺 —— 未来 quota 挤压时会失守）
+- 想对比 Chat/docsbot 等不同**回答路径**的 token 消耗
+
+### B.2 数据源
+
+- `cases.json` 里 `tags` 含 `corpus` 的 case（当前 8 条 seed：Chat×2 / Live×2 / TRTC×1 / Call×2 / Room×1）
+- 每条 case 带 `corpus_meta {product, intent, source}`，用于分组聚合
+
+新增 seed 的方式：把 case 加进 `cases.json`，`tags` 里带上 `corpus`，`corpus_meta` 里填 product / intent。
+
+### B.3 跑法
+
+```sh
+# 跑 corpus seed（本地个人 Pro 额度，约 5-10 分钟）
+python3 run_eval.py --ide claude-code --tags corpus \
+    --out-dir eval-runs/corpus-smoke-$(date +%Y-%m-%d)
+
+# 本地看报告（免费秒级，读 transcripts 分析）
+python3 coverage_report.py --out-dir eval-runs/corpus-smoke-$(date +%Y-%m-%d)
+# 生成 <out-dir>/report.md，stdout 打摘要
+```
+
+**提 PR 拿 CI 报告**：
+
+```sh
+git add eval-runs/corpus-smoke-*/
+# 注：corpus-smoke-*/transcripts/ 已在 .gitignore 白名单里（seed 都是通用问题，无 PII）
+git commit -m "eval: corpus smoke on <YYYY-MM-DD>"
+git push origin <branch>
+gh pr create ...
+```
+
+CI 自动跑 `corpus-coverage-report.yml`，把报告贴成 PR sticky comment（`header: corpus-coverage-report`，与 P2 score 报告并列）。
+
+### B.4 Bucket 定义（能力覆盖分类）
+
+| Bucket | 含义 | 判定信号 |
+|---|---|---|
+| 🟢 A · 覆盖完整 | 本地文档命中，或 docsbot + 本地双命中 | `local_slice_read >= 1` 且 final 是 factual |
+| 🟡 B · 只靠 docsbot | 本地文档无覆盖，docsbot 挂就失守 | `docsbot_could_answer=true` 且 `local_slice_read=0` |
+| 🟠 C · 拒答 | skill 明说不支持 / 找不到 | final 含"当前不支持""找不到"等 refusal 关键词 |
+| 🔵 D · 追问无路 | 反复追问最终没答上 | final 是 clarification 或空且用过 `AskUserQuestion` |
+| 🚨 E? · 疑似瞎编 | 有回答但没检索源，可能是幻觉 | 无 slice read、无 docsbot、有 factual 回答 — 需 LLM judge 二次确认 |
+
+**"触发正确性 pass 但 bucket ∈ {B/C/D/E?}"是核心缺口信号** — 路由/工具都对，但回答有覆盖问题。
+
+### B.5 报告阅读
+
+Sticky comment 的顶部 TL;DR 直接告诉你：
+- ✅ 触发正确性 N/M 通过
+- ⚠️ 有 K 个能力暗雷（product + topic + 为什么）
+- 🟢 有 L 个覆盖完整
+- ⏱ 各 case 的 tool 数量 + error 数量 + 🐢/🚀 快慢标记
+
+技术细节（8 维度矩阵 / 每条数据源 / 按产品聚合）和术语说明都在 `<details>` 里，想看再点开。
+
+### B.6 已知限制
+
+- 8 条 seed 样本量小 — 当前只做**信号验证**（"哪种缺口存在"），不做**分布统计**（"缺口占比多大"）
+- xlsx 全量 2078 条 corpus 未接入（会 stale、且 CI 跑不了全量成本太高）— 后续如果需要扩，手挑增量加进 cases.json 即可
+- 🚨 E? 需 LLM judge 二次确认，本工具不做
+- Bucket 判定是静态分析 stream-json，不消耗 API 额度
+
+---
+
 ## 6. 术语与快速参考
 
 ### 观察点分类
@@ -409,6 +483,9 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml
 | P2 单条自检 | `python3 run_eval.py --case P2-DOCS-ERRCODE` |
 | P2 smoke | `python3 run_eval.py --ide <ide> --tags smoke` |
 | P2 全量 | `python3 run_eval.py --ide <ide>` |
+| Corpus smoke（8 条真实用户 seed） | `python3 run_eval.py --ide <ide> --tags corpus` |
+| Corpus 覆盖报告（免费秒级） | `python3 coverage_report.py --out-dir <eval-run>` |
+| Bucket 分类（单文件） | `python3 bucket_classifier.py <transcript.jsonl>` |
 | 免费额度自检 | `python3 run_eval.py --ide <ide> --probe` |
 | 打分（CLI） | `python3 score.py <results.yaml>` |
 | 打分（markdown，CI 用） | `python3 score.py <results.yaml> --format markdown` |
@@ -426,6 +503,8 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml
 | `check_install.py` | P1 |
 | `run_eval.py` | P2 全自动跑 + parser + 判定器（含 `--with-trace` 入口） |
 | `score.py` | 打分 + baseline diff |
+| `bucket_classifier.py` | Corpus 覆盖分析：把 transcript 归到 A/B/C/D/E? 五档（零 LLM 消耗） |
+| `coverage_report.py` | Corpus 报告聚合器：results + transcripts + corpus_meta → markdown |
 | `phase3/` | Phase 3 白盒 trace（tracer + PostToolUse hook + eval_runner），eval-only |
 | `fixtures/transcripts/<ide>/` | parser regression 的 golden 样本 |
 | `tests/test_parser_regression.py` | 8 fixture 回归 |
@@ -434,6 +513,7 @@ python3 score.py eval-runs/<date>/results.claude-code.yaml
 | `.github/workflows/skill-check-install.yml` | P1 CI（PR + push + cron + workflow_dispatch） |
 | `.github/workflows/parser-regression.yml` | fixture 回归 + 敏感扫描 CI |
 | `.github/workflows/skill-eval-p2-score.yml` | 只在 PR 里 eval-runs 变更时跑，无 key 打分 |
+| `.github/workflows/corpus-coverage-report.yml` | Corpus 覆盖报告（PR 里 eval-runs 变更时跑，零 LLM 秒级 sticky comment） |
 | `.github/workflows/skill-ci-probe.yml` | 手动触发的 CLI 认证探测（研究性质） |
 
 ### 相关链接
