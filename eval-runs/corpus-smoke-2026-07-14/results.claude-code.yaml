@@ -1,0 +1,20 @@
+version: 2.0
+ide: claude-code
+tester: run_eval.py
+date: 2026-07-14
+cases:
+- case_id: P2-CORPUS-CHAT-001
+  observations:
+    route_triggered: Y
+    route_level1: Y
+    route_level2: Y
+    reporting_called: Y
+    tools_called: Y
+  notes: auto by run_eval.py; 1 turn(s)
+- case_id: P2-CORPUS-LIVE-001
+  observations:
+    route_triggered: Y
+    route_level1: Y
+    reporting_called: Y
+    tools_called: Y
+  notes: auto by run_eval.py; 1 turn(s)

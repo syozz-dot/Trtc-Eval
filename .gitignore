@@ -8,6 +8,12 @@ __pycache__/
 # If you want to commit them, remove the ignore rule below for that run dir.
 eval-runs/**/transcripts/
 
+# Corpus smoke transcripts are opt-in whitelisted — the 8 seed cases are
+# generic product questions (no PII), and coverage_report.py needs them
+# as input for bucket_classifier analysis in CI.
+!eval-runs/corpus-smoke-*/transcripts/
+!eval-runs/corpus-smoke-*/transcripts/**
+
 # Golden fixtures for parser regression — DO commit these
 !fixtures/
 !fixtures/**

@@ -1,0 +1,158 @@
+name: Corpus Coverage Report (offline)
+
+# Runs when a PR commits corpus eval-run outputs (transcripts + results).
+# CI itself calls ZERO LLMs — it only reads what the developer produced locally
+# and turns it into a human-readable coverage report (bucket distribution +
+# token/tool cost + capability gap ranking) as a sticky PR comment.
+#
+# Same design as skill-eval-p2-score.yml (P2 触发正确性), but focuses on:
+#   1. Bucket A/B/C/D/E? — 能力覆盖缺口（本地 KB 缺 / 追问无路 / 疑似幻觉）
+#   2. Token/tool 消耗对比 — Chat Path D vs docsbot 直答
+#   3. 按 product/intent 聚合 + 高频缺口 top-N
+#
+# Developer workflow:
+#   python3 run_eval.py --ide claude-code --tags corpus \
+#           --out-dir ./eval-runs/corpus-smoke-<YYYY-MM-DD>
+#   git add eval-runs/corpus-smoke-*/
+#   git commit + push + open PR — this workflow posts the report as a comment.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'eval-runs/**/transcripts/**.jsonl'
+      - 'eval-runs/**/results.*.yaml'
+      - 'cases.json'
+      - 'bucket_classifier.py'
+      - 'coverage_report.py'
+  workflow_dispatch:
+    inputs:
+      out_dir:
+        description: 'Specific eval-run directory (leave empty to auto-detect corpus-smoke-* from PR diff)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write   # for sticky comment
+
+concurrency:
+  group: corpus-coverage-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage-report:
+    name: Coverage from committed corpus eval-runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need base ref for diff
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install pyyaml
+
+      - name: Discover corpus eval-run dirs touched by this PR
+        id: discover
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.out_dir }}" ]; then
+            # Manual dispatch with an explicit dir
+            DIRS="${{ inputs.out_dir }}"
+          else
+            # PR diff mode: find every eval-runs/<dir>/ touched, then keep only corpus-smoke-*
+            TOUCHED=$(git diff --name-only --diff-filter=ACMR \
+                        "origin/${GITHUB_BASE_REF}"...HEAD \
+                        -- 'eval-runs/**' \
+                      | grep -oE 'eval-runs/[^/]+' | sort -u | tr '\n' ' ' || true)
+            DIRS=""
+            for d in $TOUCHED; do
+              case "$(basename "$d")" in
+                corpus-smoke-*) DIRS="$DIRS $d" ;;
+              esac
+            done
+          fi
+          DIRS=$(echo "$DIRS" | xargs)   # trim whitespace
+          echo "dirs=$DIRS" >> "$GITHUB_OUTPUT"
+          echo "Discovered corpus eval-runs: '$DIRS'"
+
+      - name: Skip if nothing to report
+        if: steps.discover.outputs.dirs == ''
+        run: |
+          echo "::notice title=No corpus eval-run in PR::Nothing to report. Run 'python3 run_eval.py --ide claude-code --tags corpus --out-dir ./eval-runs/corpus-smoke-\$(date +%Y-%m-%d)' locally, then commit the eval-runs directory."
+          echo ""
+          echo "How to produce a report:"
+          echo "  1. python3 run_eval.py --ide claude-code --tags corpus \\"
+          echo "         --out-dir ./eval-runs/corpus-smoke-\$(date +%Y-%m-%d)"
+          echo "  2. git add eval-runs/corpus-smoke-*/"
+          echo "  3. git commit + push"
+
+      - name: Generate coverage reports
+        if: steps.discover.outputs.dirs != ''
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/corpus-report
+          REPORT=/tmp/corpus-report/comment.md
+          {
+            echo "# Corpus Coverage Report"
+            echo ""
+            echo "_能力覆盖缺口 + Token 消耗分析（bucket A/B/C/D/E?）。触发正确性 pass/fail 请看 **P2 Score Report** 评论。_"
+            echo ""
+            echo "Committed by \`$GITHUB_HEAD_REF\`, analyzed by CI (no LLM calls, deterministic)."
+            echo ""
+          } > "$REPORT"
+
+          for d in ${{ steps.discover.outputs.dirs }}; do
+            if [ ! -d "$d" ]; then
+              echo "::warning::Discovered dir $d does not exist, skipping"
+              continue
+            fi
+            echo "── analyzing $d ──"
+            # coverage_report.py 写入 <out-dir>/report.md + 打印 stdout 摘要
+            python3 coverage_report.py --out-dir "$d" || {
+              echo "::warning::coverage_report.py failed for $d — continuing"
+              echo "" >> "$REPORT"
+              echo "## \`$d\` — ⚠️ analysis failed" >> "$REPORT"
+              echo "" >> "$REPORT"
+              continue
+            }
+            {
+              echo ""
+              cat "$d/report.md"
+              echo ""
+              echo "---"
+              echo ""
+            } >> "$REPORT"
+          done
+
+          echo "── final aggregated report ──"
+          cat "$REPORT"
+
+          # Also publish to the Actions run summary page
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        if: steps.discover.outputs.dirs != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-coverage-${{ github.event.pull_request.number || github.run_id }}
+          path: |
+            /tmp/corpus-report/comment.md
+            eval-runs/corpus-smoke-*/report.md
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Post sticky PR comment
+        if: steps.discover.outputs.dirs != '' && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: corpus-coverage-report
+          path: /tmp/corpus-report/comment.md
